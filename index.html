@@ -27,7 +27,7 @@
             display: flex;
             align-items: center;      /* 改为 center，垂直居中更美观 */
             justify-content: center;  /* 水平居中 */
-            background: #FFF;
+            background: #F5F7FA;             
             padding: 10px;
             border-radius: 24px;
             box-shadow: 0 20px 60px rgba(106, 27, 154, 0.15);
@@ -272,15 +272,18 @@
 
     // Constants
     const COLORS = {
-        bg: '#FFF',
-        dot: '#F3E5F5',
-        wall: '#FFAB91', // 更柔和的橙色
-        p1: '#AB47BC',   // 主角紫
-        p1Trail: '#E1BEE7',
-        ai: '#26A69A',   // AI 绿
-        aiTrail: '#B2DFDB',
-        items: ['#FFD54F', '#7986CB', '#FF5252'] // Star, Moon, Sun
+    bg: '#F5F7FA',       // 背景改为极淡的灰蓝色，不再是刺眼的纯白
+    dot: '#E0E0E0',      // 点位改为深一点的灰色
+    dotBorder: '#BDBDBD',// 【新增】点位的边框色
+    wall: '#FF7043',     // 墙壁保持醒目的橙红色
+    p1: '#9C27B0',       // 玩家颜色加深
+    p1Trail: '#E1BEE7',  
+    ai: '#00897B',       // AI颜色加深
+    aiTrail: '#B2DFDB',
+    // 物品颜色加深：金黄、深紫蓝、橘红
+    items: ['#FFC107', '#5C6BC0', '#FF5252'] 
     };
+    
     const SHAPES = ['⭐', '🌙', '☀'];
 
     // State
@@ -334,10 +337,21 @@
             this.item=-1; this.scale=0; this.tScale=0;
         }
         update() { this.scale += (this.tScale - this.scale) * 0.2; }
+        // 在 class Dot 中
         draw() {
-            ctx.beginPath(); ctx.arc(this.x, this.y, 8, 0, Math.PI*2);
-            ctx.fillStyle = COLORS.dot; ctx.fill();
-            if(this.scale > 0.01 && this.item !== -1) drawItem(this.x, this.y, this.item, this.scale);
+            // 绘制点位（加了描边）
+            ctx.beginPath(); 
+            ctx.arc(this.x, this.y, 7, 0, Math.PI * 2); // 半径稍微调小一点，留出边框位置
+            ctx.fillStyle = COLORS.dot; 
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = COLORS.dotBorder; // 加上灰色边框
+            ctx.stroke();
+
+            // 绘制弹出的物品
+            if(this.scale > 0.01 && this.item !== -1) {
+                drawItem(this.x, this.y, this.item, this.scale);
+            }
         }
     }
 
@@ -541,13 +555,64 @@
         return false;
     }
     function spawnParticles(x, y, c) { for(let i=0;i<8;i++) state.particles.push({x,y,vx:(Math.random()-.5)*12,vy:(Math.random()-.5)*12,life:1,c}); }
-    function drawItem(x,y,t,s) {
-        ctx.save(); ctx.translate(x,y+Math.sin(Date.now()/200)*3);
-        if(t===0){ ctx.beginPath();ctx.fillStyle=COLORS.items[0];for(let i=0;i<5;i++){ctx.lineTo(Math.cos((18+i*72)/180*Math.PI)*18*s,-Math.sin((18+i*72)/180*Math.PI)*18*s);ctx.lineTo(Math.cos((54+i*72)/180*Math.PI)*9*s,-Math.sin((54+i*72)/180*Math.PI)*9*s);}ctx.fill();}
-        else if(t===1){ let r=16*s;ctx.beginPath();ctx.arc(0,0,r,0,Math.PI*2);ctx.fillStyle=COLORS.items[1];ctx.fill();ctx.globalCompositeOperation='destination-out';ctx.beginPath();ctx.arc(r*0.4,-r*0.4,r*0.9,0,Math.PI*2);ctx.fill();}
-        else{ let r=18*s;ctx.strokeStyle=COLORS.items[2];ctx.lineWidth=3;for(let i=0;i<8;i++){ctx.rotate(Math.PI/4);ctx.beginPath();ctx.moveTo(r*0.5,0);ctx.lineTo(r,0);ctx.stroke();}ctx.beginPath();ctx.arc(0,0,r*0.5,0,Math.PI*2);ctx.fillStyle=COLORS.items[2];ctx.fill();}
-        ctx.restore();
+    function drawItem(x, y, type, s) {
+    ctx.save(); 
+    ctx.translate(x, y + Math.sin(Date.now()/200)*3);
+    
+    // 设置通用的描边样式
+    ctx.lineWidth = 3;
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#FFFFFF'; // 使用白色描边，像贴纸一样，增加可读性
+
+    if(type===0) { // 星星
+        ctx.beginPath();
+        ctx.fillStyle = COLORS.items[0];
+        for(let i=0;i<5;i++){
+            ctx.lineTo(Math.cos((18+i*72)/180*Math.PI)*18*s,-Math.sin((18+i*72)/180*Math.PI)*18*s);
+            ctx.lineTo(Math.cos((54+i*72)/180*Math.PI)*9*s,-Math.sin((54+i*72)/180*Math.PI)*9*s);
+        }
+        ctx.closePath();
+        ctx.stroke(); // 先描边
+        ctx.fill();   // 后填充
+    } 
+    else if(type===1) { // 月亮
+        let r=16*s; 
+        ctx.beginPath(); 
+        ctx.arc(0,0,r,0,Math.PI*2); 
+        ctx.fillStyle = COLORS.items[1]; 
+        
+        // 这里的描边处理比较特殊，因为是遮罩画法，我们简单画个圆轮廓
+        ctx.fill();
+        ctx.globalCompositeOperation='destination-out'; 
+        ctx.beginPath(); 
+        ctx.arc(r*0.4,-r*0.4,r*0.9,0,Math.PI*2); 
+        ctx.fill();
+        
+        // 恢复正常模式补画一个轮廓（可选，为了简单这里不做复杂描边，因为深蓝色在浅底上很清晰）
+        ctx.globalCompositeOperation='source-over';
+    } 
+    else { // 太阳
+        let r=18*s; 
+        ctx.strokeStyle = COLORS.items[2]; // 太阳光芒用本色
+        ctx.lineWidth = 3; 
+        for(let i=0;i<8;i++){
+            ctx.rotate(Math.PI/4);
+            ctx.beginPath();
+            ctx.moveTo(r*0.5,0);
+            ctx.lineTo(r,0);
+            ctx.stroke();
+        }
+        ctx.beginPath();
+        ctx.arc(0,0,r*0.5,0,Math.PI*2);
+        ctx.fillStyle = COLORS.items[2];
+        ctx.fill();
+        // 给太阳中心加个白圈，更清晰
+        ctx.strokeStyle = '#FFF';
+        ctx.lineWidth = 2;
+        ctx.stroke();
     }
+    ctx.restore();
+}
 
     // ================= Core Logic =================
     function applySettings() {
