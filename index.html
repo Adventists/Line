@@ -3,458 +3,590 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>连线寻宝 - 溜溜球与斜墙</title>
+    <title>连线寻宝 - 最终完美版</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
+        
+        * { box-sizing: border-box; }
 
         body {
             margin: 0; padding: 0;
-            background-color: #F3E5F5; /* 淡紫色背景 */
-            display: flex; justify-content: center; align-items: center;
-            height: 100vh; overflow: hidden;
+            background-color: #ECEFF1;
+            display: flex;
+            height: 100vh;
             font-family: 'Fredoka One', cursive;
-            touch-action: none; user-select: none;
+            color: #333;
+            overflow: hidden;
+        }
+
+        /* === 左侧控制面板 === */
+        #debugPanel {
+            width: 320px;
+            background: #263238;
+            color: #FFF;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            box-shadow: 4px 0 15px rgba(0,0,0,0.3);
+            z-index: 100;
+            overflow-y: auto;
+        }
+
+        #debugPanel h2 { margin: 0 0 10px 0; color: #80CBC4; font-size: 20px; border-bottom: 2px solid #546E7A; padding-bottom: 8px; }
+        .control-group { margin-bottom: 4px; }
+        .control-group label { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 4px; color: #B0BEC5; }
+        .control-group span { color: #80CBC4; }
+        
+        input[type="range"], select { width: 100%; padding: 6px; cursor: pointer; }
+        input[type="number"] { width: 100%; padding: 8px; background: #37474F; border: none; color: white; border-radius: 4px;}
+        
+        button {
+            background: #00BCD4; color: white; border: none; padding: 12px;
+            border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 10px;
+            box-shadow: 0 3px 0 #00838F; transition: 0.1s;
+        }
+        button:active { transform: translateY(3px); box-shadow: none; }
+
+        /* === 右侧游戏区域 === */
+        #gameWrapper {
+            flex: 1; display: flex; justify-content: center; align-items: center;
+            background: #CFD8DC; position: relative;
         }
 
         #gameContainer {
             position: relative;
-            width: 100%; height: 100%;
-            max-width: 60vh; max-height: 100vh;
-            background: #fff;
-            box-shadow: 0 10px 40px rgba(150, 100, 200, 0.15);
-            border-radius: 12px; overflow: hidden;
+            aspect-ratio: 750 / 1334; height: 95vh; max-width: 100%;
+            background: #fff; box-shadow: 0 0 60px rgba(0,0,0,0.15);
+            border-radius: 10px; overflow: hidden;
         }
 
         canvas { display: block; width: 100%; height: 100%; }
 
-        #targetBar {
-            position: absolute; top: 60px; width: 100%;
-            display: flex; justify-content: center; align-items: center;
-            gap: 20px; pointer-events: none; z-index: 10;
+        /* UI */
+        #levelUI {
+            position: absolute; top: 5%; width: 100%;
+            display: flex; justify-content: center; gap: 20px; pointer-events: none;
+        }
+        
+        #versusUI {
+            position: absolute; top: 5%; width: 100%;
+            display: flex; justify-content: space-around; align-items: center;
+            pointer-events: none; opacity: 0;
+        }
+        .score-box { text-align: center; background: rgba(255,255,255,0.9); padding: 5px 15px; border-radius: 15px; }
+        .score-val { font-size: 32px; font-weight: bold; }
+        .score-label { font-size: 12px; opacity: 0.6; }
+        #p1ScoreVal { color: #AB47BC; }
+        #aiScoreVal { color: #009688; }
+        
+        #versusTarget { 
+            width: 70px; height: 70px; background: #FFF; 
+            border-radius: 50%; display: flex; justify-content: center; align-items: center;
+            font-size: 32px; box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+            border: 5px solid #FFD54F;
         }
 
         .target-icon {
-            width: 50px; height: 50px;
-            background: #FAFAFA; border-radius: 50%;
+            width: 50px; height: 50px; background: #FAFAFA; border-radius: 50%;
             display: flex; justify-content: center; align-items: center;
-            font-size: 24px; color: #E0E0E0;
-            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            font-size: 24px; color: #E0E0E0; border: 2px solid transparent; transition: 0.3s;
         }
-        .target-icon.active {
-            transform: scale(1.3); background: #fff;
-            border: 3px solid #AB47BC; color: #AB47BC;
-            box-shadow: 0 5px 20px rgba(171, 71, 188, 0.3);
-        }
-        .target-icon.done {
-            background: #AB47BC; color: #fff; transform: scale(1);
-        }
+        .target-icon.active { transform: scale(1.3); background: #fff; border-color: #AB47BC; color: #AB47BC; }
+        .target-icon.done { background: #AB47BC; color: #fff; transform: scale(1); }
 
-        #levelIndicator {
-            position: absolute; bottom: 50px; width: 100%;
-            text-align: center; color: #CE93D8;
-            font-size: 24px; letter-spacing: 2px;
+        #msgOverlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.85); backdrop-filter: blur(8px);
+            display: flex; flex-direction: column; justify-content: center; align-items: center;
+            z-index: 20; display: none; opacity: 0; transition: opacity 0.5s;
         }
+        #msgTitle { font-size: 48px; margin-bottom: 20px; color: #333; }
         
-        #hint {
-            position: absolute; bottom: 120px; width: 100%;
-            text-align: center; color: #BA68C8; font-size: 16px;
-            opacity: 0.8; pointer-events: none;
-        }
     </style>
 </head>
 <body>
 
-<div id="gameContainer">
-    <canvas id="gameCanvas" width="750" height="1334"></canvas>
+<div id="debugPanel">
+    <h2>🛠️ 游戏控制台</h2>
     
-    <div id="targetBar">
-        <div id="icon0" class="target-icon">⭐</div>
-        <div id="icon1" class="target-icon">🌙</div>
-        <div id="icon2" class="target-icon">☀</div>
+    <div class="control-group">
+        <label>模式选择</label>
+        <select id="optMode">
+            <option value="level">闯关模式 (单人)</option>
+            <option value="versus">对抗模式 (VS AI)</option>
+        </select>
     </div>
 
-    <div id="hint">小心斜向的障碍墙！</div>
-    <div id="levelIndicator">LEVEL <span id="lvlNum">1</span></div>
+    <div class="control-group">
+        <label>地图尺寸 <span id="valGrid">3x3</span></label>
+        <input type="range" id="optGrid" min="3" max="6" step="1" value="3">
+    </div>
+
+    <div class="control-group" id="groupAI">
+        <label>AI 失误率 <span id="valAI">10%</span></label>
+        <input type="range" id="optAIError" min="0" max="100" step="5" value="10">
+        <div style="font-size:11px; color:#78909C; margin-top:2px;">(0=神射手, 100=纯乱玩)</div>
+    </div>
+
+    <div class="control-group" id="groupTarget">
+        <label>目标数量</label>
+        <input type="number" id="optTargetCount" value="3" min="1">
+    </div>
+
+    <div class="control-group" id="groupWinScore" style="display:none">
+        <label>获胜分数</label>
+        <input type="number" id="optWinScore" value="3" min="1">
+    </div>
+
+    <button onclick="applySettings()">应用设置并重开</button>
+</div>
+
+<div id="gameWrapper">
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="750" height="1334"></canvas>
+        <div id="levelUI"></div>
+        <div id="versusUI">
+            <div class="score-box" style="color: #AB47BC;">
+                <div id="p1ScoreVal" class="score-val">0</div>
+                <div class="score-label">YOU</div>
+            </div>
+            <div id="versusTarget">⭐</div>
+            <div class="score-box" style="color: #009688;">
+                <div id="aiScoreVal" class="score-val">0</div>
+                <div class="score-label">AI</div>
+            </div>
+        </div>
+        <div id="msgOverlay">
+            <div id="msgTitle">GAME OVER</div>
+            <button onclick="applySettings()">再来一局</button>
+        </div>
+    </div>
 </div>
 
 <script>
+    // ================= 1. 初始化与常量 =================
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const lvlNumEl = document.getElementById('lvlNum');
-    const uiIcons = [document.getElementById('icon0'), document.getElementById('icon1'), document.getElementById('icon2')];
+    
+    // Controls
+    const optMode = document.getElementById('optMode');
+    const optGrid = document.getElementById('optGrid');
+    const valGrid = document.getElementById('valGrid');
+    const optAIError = document.getElementById('optAIError');
+    const valAI = document.getElementById('valAI');
+    
+    // UI Updates
+    optGrid.oninput = () => valGrid.innerText = `${optGrid.value}x${optGrid.value}`;
+    optAIError.oninput = () => valAI.innerText = `${optAIError.value}%`;
+    optMode.onchange = () => {
+        const isVersus = optMode.value === 'versus';
+        document.getElementById('groupTarget').style.display = isVersus ? 'none' : 'block';
+        document.getElementById('groupWinScore').style.display = isVersus ? 'block' : 'none';
+        document.getElementById('groupAI').style.display = isVersus ? 'block' : 'none';
+    };
 
-    // ================= 音效系统 =================
+    const COLORS = {
+        bg: '#F3E5F5', dot: '#E1BEE7', wall: '#FF7043',
+        p1: '#AB47BC', p1Trail: '#CE93D8',
+        ai: '#009688', aiTrail: '#80CBC4',
+        items: ['#FFD54F', '#7986CB', '#FF5252']
+    };
+    const SHAPES = ['⭐', '🌙', '☀'];
+
+    let CONFIG = {
+        grid: 3, mode: 'level', targetCount: 3, winScore: 3,
+        orbitR: 45, speed: 16, returnSpeed: 0.2, aiErrorRate: 0.1
+    };
+
+    let state = {
+        running: false, dots: [], walls: [], entities: [], trail: [], particles: [], shake: 0,
+        levelStep: 0, p1Score: 0, aiScore: 0, vsTargetType: 0
+    };
+
+    // ================= 2. 音效系统 =================
     const AudioSys = {
         ctx: null,
         init: function() {
             if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
             if (this.ctx.state === 'suspended') this.ctx.resume();
         },
-        playTone: function(freq, type, dur, vol=0.1) {
+        play(freq, type, len) {
             if(!this.ctx) return;
-            const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
-            osc.type = type; osc.frequency.value = freq;
-            gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
-            osc.connect(gain); gain.connect(this.ctx.destination);
-            osc.start(); osc.stop(this.ctx.currentTime + dur);
+            const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+            o.type=type; o.frequency.value=freq; 
+            g.gain.setValueAtTime(0.1, this.ctx.currentTime);
+            g.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime+len);
+            o.connect(g); g.connect(this.ctx.destination);
+            o.start(); o.stop(this.ctx.currentTime+len);
         },
-        // 溜溜球弹回音效 (Boing~)
-        playBoing: function() {
+        shoot() { this.play(600, 'sine', 0.15); },
+        boing() { 
             if(!this.ctx) return;
-            const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
-            osc.type = 'sine';
-            // 频率先降后升，模拟弹簧
-            osc.frequency.setValueAtTime(300, this.ctx.currentTime);
-            osc.frequency.linearRampToValueAtTime(150, this.ctx.currentTime + 0.1);
-            osc.frequency.linearRampToValueAtTime(400, this.ctx.currentTime + 0.3);
-            
-            gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
-            
-            osc.connect(gain); gain.connect(this.ctx.destination);
-            osc.start(); osc.stop(this.ctx.currentTime + 0.3);
+            const o = this.ctx.createOscillator(), g = this.ctx.createGain();
+            o.type='triangle'; 
+            o.frequency.setValueAtTime(200, this.ctx.currentTime);
+            o.frequency.linearRampToValueAtTime(400, this.ctx.currentTime+0.3);
+            g.gain.setValueAtTime(0.2, this.ctx.currentTime);
+            g.gain.linearRampToValueAtTime(0, this.ctx.currentTime+0.3);
+            o.connect(g); g.connect(this.ctx.destination); o.start(); o.stop(this.ctx.currentTime+0.3);
         },
-        playShoot: function() {
-            if(!this.ctx) return;
-            const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
-            osc.frequency.setValueAtTime(600, this.ctx.currentTime);
-            osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.15);
-            gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
-            gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.15);
-            osc.connect(gain); gain.connect(this.ctx.destination);
-            osc.start(); osc.stop(this.ctx.currentTime + 0.15);
-        },
-        playCollect: function(step) {
-            if(step===0) { this.playTone(523, 'sine', 0.3); setTimeout(()=>this.playTone(1046,'sine',0.1),50); }
-            else if(step===1) { this.playTone(659, 'sine', 0.4); setTimeout(()=>this.playTone(987,'sine',0.2),80); }
-            else { 
-                const t = this.ctx.currentTime;
-                this.playTone(523, 'sine', 0.1); setTimeout(()=>this.playTone(659,'sine',0.1),80);
-                setTimeout(()=>this.playTone(783,'sine',0.1),160); setTimeout(()=>this.playTone(1046,'sine',0.4),240);
-            }
-        }
+        win() { this.play(523, 'square', 0.1); setTimeout(()=>this.play(784,'square',0.2), 100); }
     };
 
-    // ================= 配置 =================
-    const CONFIG = {
-        gridSize: 3,
-        orbitRadius: 40,
-        rotationSpeed: 0.05,
-        moveSpeed: 16,
-        returnSpeed: 0.15, // 溜溜球收回的速度系数 (Lerp)
-        colors: {
-            bg: '#F3E5F5',
-            dot: '#E1BEE7',
-            player: '#AB47BC', // 紫色系
-            trail: '#E1BEE7',  // 成功的连线
-            yoyoString: '#BA68C8', // 溜溜球的绳子
-            wall: '#FF7043',   // 橙色障碍墙，对比明显
-            star: '#FFD54F', moon: '#7986CB', sun: '#FF7043'
-        },
-        shapes: ['⭐', '🌙', '☀']
-    };
-
-    let state = {
-        level: 1, step: 0, dots: [], walls: [], 
-        player: null, trail: [], targetDotIndex: -1, particles: [], shake: 0
-    };
-
+    // ================= 3. 类定义 =================
     class Dot {
         constructor(x, y, r, c, idx) {
             this.x = x; this.y = y; this.r = r; this.c = c; this.index = idx;
-            this.scale = 0; this.targetScale = 1;
+            this.item = -1; this.scale = 0; this.targetScale = 0;
         }
-        update() { if(this.scale < this.targetScale) this.scale += (this.targetScale-this.scale)*0.15; }
+        update() { this.scale += (this.targetScale - this.scale) * 0.2; }
         draw() {
-            ctx.beginPath(); ctx.arc(this.x, this.y, 8, 0, Math.PI*2);
-            ctx.fillStyle = CONFIG.colors.dot; ctx.fill();
-            if(state.targetDotIndex === this.index) {
-                const s = this.scale;
-                const floatY = Math.sin(Date.now()/200)*3;
-                drawIcon(this.x, this.y+floatY, 18*s, state.step);
-            }
+            ctx.beginPath(); ctx.arc(this.x, this.y, 8, 0, Math.PI*2); ctx.fillStyle = COLORS.dot; ctx.fill();
+            if(this.scale > 0.01 && this.item !== -1) drawItem(this.x, this.y, this.item, this.scale);
         }
     }
 
     class Wall {
-        constructor(dotA, dotB) {
-            this.x1 = dotA.x; this.y1 = dotA.y;
-            this.x2 = dotB.x; this.y2 = dotB.y;
-        }
+        constructor(dA, dB) { this.x1=dA.x; this.y1=dA.y; this.x2=dB.x; this.y2=dB.y; }
         draw() {
-            ctx.beginPath();
-            ctx.moveTo(this.x1, this.y1);
-            ctx.lineTo(this.x2, this.y2);
-            ctx.lineWidth = 6;
-            ctx.strokeStyle = CONFIG.colors.wall;
-            ctx.lineCap = 'round';
-            ctx.stroke();
-            
-            // 绘制斜线纹理
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(this.x1,this.y1); ctx.lineTo(this.x2,this.y2);
+            ctx.lineWidth=8; ctx.strokeStyle=COLORS.wall; ctx.lineCap='round'; ctx.stroke();
+            ctx.lineWidth=2; ctx.strokeStyle='rgba(255,255,255,0.4)'; ctx.stroke();
         }
     }
 
-    class Player {
-        constructor(startDot) {
-            this.currentDot = startDot;
+    class Entity {
+        constructor(isAI, startDot) {
+            this.isAI = isAI;
+            this.color = isAI ? COLORS.ai : COLORS.p1;
+            this.curDot = startDot;
             this.angle = -Math.PI/2;
-            this.state = 'rotating'; // rotating, flying, returning
-            this.pos = {x:0, y:0};
-            this.updatePos();
-        }
-        updatePos() {
-            this.pos.x = this.currentDot.x + Math.cos(this.angle) * CONFIG.orbitRadius;
-            this.pos.y = this.currentDot.y + Math.sin(this.angle) * CONFIG.orbitRadius;
+            this.pos = {x: startDot.x, y: startDot.y - CONFIG.orbitR};
+            this.state = 'rotating'; 
+            this.velocity = {x:0, y:0};
+            
+            this.aiTimer = 0;
+            this.lastDot = null;
         }
         update() {
             if(this.state === 'rotating') {
-                this.angle += CONFIG.rotationSpeed;
-                this.updatePos();
-            } 
-            else if(this.state === 'flying') {
-                const prevX = this.pos.x;
-                const prevY = this.pos.y;
-                this.pos.x += this.velocity.x;
-                this.pos.y += this.velocity.y;
+                this.angle += 0.05;
+                this.pos.x = this.curDot.x + Math.cos(this.angle) * CONFIG.orbitR;
+                this.pos.y = this.curDot.y + Math.sin(this.angle) * CONFIG.orbitR;
+                if(this.isAI) this.aiThink();
+            } else if(this.state === 'flying') {
+                const px = this.pos.x, py = this.pos.y;
+                this.pos.x += this.velocity.x; this.pos.y += this.velocity.y;
 
-                // 墙壁碰撞检测 -> 触发溜溜球回弹
-                if(checkWallCollision(prevX, prevY, this.pos.x, this.pos.y)) {
-                    this.triggerYoYoReturn();
+                if(checkWall(px, py, this.pos.x, this.pos.y) || 
+                   this.pos.x<0 || this.pos.x>canvas.width || this.pos.y<0 || this.pos.y>canvas.height) {
+                    this.triggerReturn();
                     return;
                 }
-
-                // 边界检测 -> 触发溜溜球回弹
-                if(this.pos.x<0 || this.pos.x>canvas.width || this.pos.y<0 || this.pos.y>canvas.height) {
-                    this.triggerYoYoReturn();
-                    return;
-                }
-
-                // 吸附
                 for(let d of state.dots) {
-                    if(d === this.currentDot) continue;
-                    if(Math.hypot(this.pos.x-d.x, this.pos.y-d.y) < CONFIG.orbitRadius+5) {
-                        this.landOn(d);
+                    if(d === this.curDot) continue;
+                    if(Math.hypot(this.pos.x-d.x, this.pos.y-d.y) < CONFIG.orbitR + 5) {
+                        this.land(d);
                         return;
                     }
                 }
-            }
-            else if(this.state === 'returning') {
-                // 溜溜球收回逻辑 (Lerp 插值)
-                const tx = this.currentDot.x;
-                const ty = this.currentDot.y;
-                
+            } else if(this.state === 'returning') {
+                const tx = this.curDot.x, ty = this.curDot.y;
                 this.pos.x += (tx - this.pos.x) * CONFIG.returnSpeed;
                 this.pos.y += (ty - this.pos.y) * CONFIG.returnSpeed;
-                
-                // 如果距离足够近，恢复旋转
                 if(Math.hypot(this.pos.x-tx, this.pos.y-ty) < 10) {
                     this.state = 'rotating';
-                    // 重置角度为当前相对于圆心的角度，避免跳变
                     this.angle = Math.atan2(this.pos.y-ty, this.pos.x-tx);
                 }
             }
         }
         shoot() {
-            if(this.state === 'rotating') {
-                AudioSys.playShoot();
-                this.state = 'flying';
-                const angle = Math.atan2(this.pos.y-this.currentDot.y, this.pos.x-this.currentDot.x);
-                this.velocity = {x: Math.cos(angle)*CONFIG.moveSpeed, y: Math.sin(angle)*CONFIG.moveSpeed};
-            }
+            if(this.state !== 'rotating') return;
+            AudioSys.shoot();
+            this.state = 'flying';
+            const a = Math.atan2(this.pos.y - this.curDot.y, this.pos.x - this.curDot.x);
+            this.velocity = { x: Math.cos(a)*CONFIG.speed, y: Math.sin(a)*CONFIG.speed };
         }
-        triggerYoYoReturn() {
-            AudioSys.playBoing();
+        triggerReturn() {
+            AudioSys.boing();
+            spawnParticles(this.pos.x, this.pos.y, COLORS.wall);
             state.shake = 5;
-            spawnParticles(this.pos.x, this.pos.y, 0); // 碰撞火花
             this.state = 'returning';
-            // 可以在这里清除之前的连线（如果需要惩罚），或者保留
-            // state.trail = []; 
         }
-        landOn(newDot) {
-            state.trail.push({x1:this.currentDot.x, y1:this.currentDot.y, x2:newDot.x, y2:newDot.y});
+        land(dot) {
+            state.trail.push({x1:this.curDot.x, y1:this.curDot.y, x2:dot.x, y2:dot.y, c: this.isAI?COLORS.aiTrail:COLORS.p1Trail});
+            if(state.trail.length>10) state.trail.shift();
+
+            this.lastDot = this.curDot; // 记录历史
             this.state = 'rotating';
-            this.currentDot = newDot;
-            this.angle = Math.atan2(this.pos.y-newDot.y, this.pos.x-newDot.x);
-            if(newDot.index === state.targetDotIndex) collectTarget(newDot);
+            this.curDot = dot;
+            this.angle = Math.atan2(this.pos.y-dot.y, this.pos.x-dot.x);
+            checkLogic(this, dot);
         }
         draw() {
-            // 如果在飞行或收回，画出溜溜球的绳子
             if(this.state === 'flying' || this.state === 'returning') {
-                ctx.beginPath();
-                ctx.moveTo(this.currentDot.x, this.currentDot.y);
-                ctx.lineTo(this.pos.x, this.pos.y);
-                ctx.strokeStyle = CONFIG.colors.yoyoString;
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]); // 虚线看起来更像绳子
-                ctx.stroke();
-                ctx.setLineDash([]);
+                ctx.beginPath(); ctx.moveTo(this.curDot.x, this.curDot.y); ctx.lineTo(this.pos.x, this.pos.y);
+                ctx.strokeStyle = this.color; ctx.lineWidth=2; ctx.setLineDash([5,5]); ctx.stroke(); ctx.setLineDash([]);
+            }
+            ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, 10, 0, Math.PI*2); ctx.fillStyle = this.color; ctx.fill();
+            ctx.fillStyle='#fff'; ctx.beginPath(); ctx.arc(this.pos.x-3, this.pos.y-3, 3, 0, Math.PI*2); ctx.fill();
+            if(this.isAI) { ctx.fillStyle='#fff'; ctx.font='bold 10px Arial'; ctx.fillText('AI', this.pos.x-5, this.pos.y+4); }
+        }
+        
+        // --- AI 逻辑 ---
+        aiThink() {
+            const now = Date.now();
+            if(now < this.aiTimer) return;
+            
+            let target = null;
+            if(CONFIG.mode === 'versus') {
+                let targets = state.dots.filter(d => d.item === state.vsTargetType);
+                if(targets.length > 0) {
+                    targets.sort((a,b) => dist(this.curDot, a) - dist(this.curDot, b));
+                    target = targets[0];
+                }
+            }
+            if(!target) return;
+
+            // 1. 寻找直线邻居
+            // 【关键修改】不再检查 checkWall，因为斜向墙并不阻挡直线移动
+            const neighbors = state.dots.filter(d => 
+                (Math.abs(d.r - this.curDot.r) + Math.abs(d.c - this.curDot.c) === 1)
+            );
+            
+            let candidates = neighbors;
+            if(neighbors.length > 1 && this.lastDot) {
+                candidates = neighbors.filter(n => n !== this.lastDot);
             }
 
-            // 画球
-            ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, 10, 0, Math.PI*2);
-            ctx.fillStyle=CONFIG.colors.player; ctx.fill();
-            
-            // 画高光
-            ctx.beginPath(); ctx.arc(this.pos.x-3, this.pos.y-3, 3, 0, Math.PI*2);
-            ctx.fillStyle='#fff'; ctx.fill();
+            let bestNext = null;
+            let minD = Infinity;
+            for(let n of candidates) {
+                let d = dist(n, target);
+                if(d < minD) { minD = d; bestNext = n; }
+            }
+
+            if(bestNext) {
+                let aimAngle = Math.atan2(bestNext.y - this.curDot.y, bestNext.x - this.curDot.x);
+                let curAngle = normalizeAngle(this.angle);
+                let tarAngle = normalizeAngle(aimAngle);
+
+                const willFail = Math.random() < CONFIG.aiErrorRate;
+                
+                if(willFail) {
+                    // 模拟失误：在没对准时就射击，或者故意偏移
+                    const diff = Math.abs(curAngle - tarAngle);
+                    if((diff < 1.0 && diff > 0.3) && Math.random() < 0.1) {
+                        this.shoot();
+                        this.aiTimer = now + 1000;
+                    }
+                } else {
+                    // 精准射击
+                    const diff = Math.abs(curAngle - tarAngle);
+                    if(diff < 0.1 || Math.abs(diff - Math.PI*2) < 0.1) {
+                        this.shoot();
+                    }
+                }
+            }
         }
     }
 
-    // ================= 辅助函数 =================
-    function checkWallCollision(x1, y1, x2, y2) {
+    // ================= 4. 辅助函数 =================
+    function dist(a, b) { return Math.hypot(a.x-b.x, a.y-b.y); }
+    function normalizeAngle(a) { let r = a % (Math.PI*2); return r < 0 ? r + Math.PI*2 : r; }
+    
+    // 【关键修复】碰撞检测：排除端点接触，只有真正穿过才算撞墙
+    // 斜向墙壁不阻挡直线移动，因为直线移动的中点不会落在斜线上
+    function checkWall(x1, y1, x2, y2) {
         for(let w of state.walls) {
-            if(getLineIntersection(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2)) return true;
+            let d = (w.y2-w.y1)*(x2-x1) - (w.x2-w.x1)*(y2-y1);
+            if(d === 0) continue;
+            let ua = ((w.x2-w.x1)*(y1-w.y1) - (w.y2-w.y1)*(x1-w.x1)) / d;
+            let ub = ((x2-x1)*(y1-w.y1) - (y2-y1)*(x1-w.x1)) / d;
+            // 改为严格大于0和小于1，排除端点重合的情况
+            if(ua > 0.05 && ua < 0.95 && ub > 0.05 && ub < 0.95) return true;
         }
         return false;
     }
 
-    function getLineIntersection(p0_x, p0_y, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y) {
-        let s1_x, s1_y, s2_x, s2_y;
-        s1_x = p1_x - p0_x; s1_y = p1_y - p0_y;
-        s2_x = p3_x - p2_x; s2_y = p3_y - p2_y;
-        let s, t, denom = -s2_x * s1_y + s1_x * s2_y;
-        if (denom === 0) return false;
-        s = (-s1_y * (p0_x - p2_x) + s1_x * (p0_y - p2_y)) / denom;
-        t = (s2_x * (p0_y - p2_y) - s2_y * (p0_x - p2_x)) / denom;
-        return (s >= 0 && s <= 1 && t >= 0 && t <= 1);
+    function spawnParticles(x, y, c) {
+        for(let i=0;i<8;i++) state.particles.push({x, y, vx:(Math.random()-.5)*10, vy:(Math.random()-.5)*10, life:1, c});
     }
-
-    function drawIcon(x, y, r, type) {
-        ctx.save(); ctx.translate(x,y);
-        if(type===0) { 
-            ctx.beginPath(); ctx.fillStyle = CONFIG.colors.star;
-            for(let i=0;i<5;i++){ ctx.lineTo(Math.cos((18+i*72)/180*Math.PI)*r, -Math.sin((18+i*72)/180*Math.PI)*r); ctx.lineTo(Math.cos((54+i*72)/180*Math.PI)*r*0.5, -Math.sin((54+i*72)/180*Math.PI)*r*0.5); }
+    
+    function drawItem(x, y, type, s) {
+        ctx.save(); ctx.translate(x, y + Math.sin(Date.now()/200)*2);
+        if(type===0) {
+            ctx.beginPath(); ctx.fillStyle=COLORS.items[0];
+            for(let i=0;i<5;i++){ctx.lineTo(Math.cos((18+i*72)/180*Math.PI)*18*s,-Math.sin((18+i*72)/180*Math.PI)*18*s);ctx.lineTo(Math.cos((54+i*72)/180*Math.PI)*9*s,-Math.sin((54+i*72)/180*Math.PI)*9*s);}
             ctx.fill();
         } else if(type===1) {
-            ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fillStyle=CONFIG.colors.moon; ctx.fill();
-            ctx.globalCompositeOperation='destination-out'; ctx.beginPath(); ctx.arc(r*0.3,-r*0.3,r*0.8,0,Math.PI*2); ctx.fill();
-            ctx.globalCompositeOperation='source-over';
+            let r=16*s; ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fillStyle=COLORS.items[1]; ctx.fill();
+            ctx.globalCompositeOperation='destination-out'; ctx.beginPath(); ctx.arc(r*0.4,-r*0.4,r*0.9,0,Math.PI*2); ctx.fill();
         } else {
-            ctx.strokeStyle=CONFIG.colors.sun; ctx.lineWidth=2;
-            for(let i=0;i<8;i++){ ctx.rotate(Math.PI/4); ctx.beginPath(); ctx.moveTo(r*0.6,0); ctx.lineTo(r*1.2,0); ctx.stroke(); }
-            ctx.beginPath(); ctx.arc(0,0,r*0.6,0,Math.PI*2); ctx.fillStyle=CONFIG.colors.sun; ctx.fill();
+            let r=18*s; ctx.strokeStyle=COLORS.items[2]; ctx.lineWidth=2;
+            for(let i=0;i<8;i++){ctx.rotate(Math.PI/4);ctx.beginPath();ctx.moveTo(r*0.5,0);ctx.lineTo(r,0);ctx.stroke();}
+            ctx.beginPath();ctx.arc(0,0,r*0.5,0,Math.PI*2);ctx.fillStyle=COLORS.items[2];ctx.fill();
         }
         ctx.restore();
     }
 
-    // ================= 游戏流程 =================
-    function initLevel() {
-        state.step = 0; state.trail = []; state.dots = []; state.walls = []; state.particles = [];
-        
-        const mX = 150, mY = 400;
-        const size = Math.min(canvas.width - mX*2, canvas.height - mY*2);
-        const step = size / 2;
+    // ================= 5. 游戏流程 =================
+    function applySettings() {
+        CONFIG.mode = optMode.value;
+        CONFIG.grid = parseInt(optGrid.value);
+        CONFIG.targetCount = parseInt(document.getElementById('optTargetCount').value);
+        CONFIG.winScore = parseInt(document.getElementById('optWinScore').value);
+        CONFIG.aiErrorRate = parseInt(optAIError.value) / 100;
+
+        state = { running: true, dots: [], walls: [], entities: [], trail: [], particles: [], shake: 0, levelStep: 0, p1Score: 0, aiScore: 0, vsTargetType: 0 };
+        document.getElementById('msgOverlay').style.opacity = 0;
+        setTimeout(()=>document.getElementById('msgOverlay').style.display='none', 500);
+
+        // 生成地图
+        const padX = 80, padY = 200;
+        const size = Math.min(canvas.width - padX, canvas.height - padY);
+        const step = size / (CONFIG.grid - 1);
+        const startX = (canvas.width - size)/2;
+        const startY = (canvas.height - size)/2 + 50;
         let idx = 0;
-        
-        // 生成点
-        for(let r=0; r<3; r++){
-            for(let c=0; c<3; c++){
-                state.dots.push(new Dot((canvas.width-size)/2 + c*step, (canvas.height-size)/2+50 + r*step, r, c, idx++));
-            }
+        for(let r=0; r<CONFIG.grid; r++) for(let c=0; c<CONFIG.grid; c++) state.dots.push(new Dot(startX + c*step, startY + r*step, r, c, idx++));
+
+        // 生成斜墙 (Level 2 数量)
+        let nWalls = Math.floor(CONFIG.grid * 0.8);
+        for(let i=0; i<nWalls; i++) {
+            let a = state.dots[Math.floor(Math.random()*state.dots.length)];
+            let b = state.dots.find(d => Math.abs(d.r-a.r)===1 && Math.abs(d.c-a.c)===1);
+            if(b && !state.walls.some(w => (w.x1===a.x && w.x2===b.x))) state.walls.push(new Wall(a, b));
         }
 
-        // 生成斜向障碍墙
-        // 规则：Level 2 开始有墙。连接对角线邻居。
-        const wallCount = state.level === 1 ? 0 : (state.level === 2 ? 1 : 2);
-        
-        let attempts = 0;
-        while(state.walls.length < wallCount && attempts < 50) {
-            attempts++;
-            const dotA = state.dots[Math.floor(Math.random()*state.dots.length)];
-            // 寻找对角线邻居: 行差1且列差1
-            const diagonalNeighbors = state.dots.filter(d => Math.abs(d.r-dotA.r) === 1 && Math.abs(d.c-dotA.c) === 1);
-            
-            if(diagonalNeighbors.length > 0) {
-                const dotB = diagonalNeighbors[Math.floor(Math.random()*diagonalNeighbors.length)];
-                // 检查重复
-                if(!state.walls.some(w => (w.x1===dotA.x && w.x2===dotB.x) || (w.x1===dotB.x && w.x2===dotA.x))) {
-                    state.walls.push(new Wall(dotA, dotB));
-                }
+        // 生成玩家
+        state.entities.push(new Entity(false, state.dots[state.dots.length - CONFIG.grid]));
+
+        if(CONFIG.mode === 'versus') {
+            state.entities.push(new Entity(true, state.dots[CONFIG.grid - 1]));
+            document.getElementById('levelUI').style.opacity = 0;
+            document.getElementById('versusUI').style.opacity = 1;
+            document.getElementById('p1ScoreVal').innerText = 0;
+            document.getElementById('aiScoreVal').innerText = 0;
+            spawnVersusItems();
+        } else {
+            document.getElementById('levelUI').style.opacity = 1;
+            document.getElementById('versusUI').style.opacity = 0;
+            initLevelUI(); spawnLevelTarget();
+        }
+    }
+
+    function spawnVersusItems() {
+        state.dots.forEach(d => {d.item=-1; d.targetScale=0;});
+        state.vsTargetType = Math.floor(Math.random()*3);
+        document.getElementById('versusTarget').innerText = SHAPES[state.vsTargetType];
+
+        const occupied = state.entities.map(e => e.curDot);
+        let safeDots = state.dots.filter(d => !occupied.includes(d));
+        if (safeDots.length === 0) return;
+
+        let count = Math.max(1, Math.ceil(state.dots.length / 3));
+        let assigned = 0;
+        let tDot = safeDots[Math.floor(Math.random()*safeDots.length)];
+        tDot.item = state.vsTargetType; tDot.targetScale = 1;
+        assigned++;
+
+        while(assigned < count) {
+            let d = safeDots[Math.floor(Math.random()*safeDots.length)];
+            if(d.item === -1) {
+                d.item = Math.floor(Math.random()*3); d.targetScale = 1;
+                assigned++;
             }
         }
-
-        const startDot = state.dots[6];
-        state.player = new Player(startDot);
-        
-        uiIcons.forEach((i,x)=>{i.className='target-icon'; i.innerText=CONFIG.shapes[x]});
-        updateUI();
-        spawnNextTarget();
     }
 
-    function spawnNextTarget() {
-        let cands = state.dots.filter(d => d !== state.player.currentDot);
-        state.targetDotIndex = cands[Math.floor(Math.random()*cands.length)].index;
-        state.dots[state.targetDotIndex].scale = 0;
+    // 闯关特有
+    function initLevelUI() {
+        const ui = document.getElementById('levelUI'); ui.innerHTML = '';
+        for(let i=0; i<CONFIG.targetCount; i++) {
+            let el = document.createElement('div'); el.className = 'target-icon'; el.innerText = SHAPES[i%3];
+            ui.appendChild(el);
+        }
+        updateLevelUI();
+    }
+    function updateLevelUI() {
+        const ui = document.getElementById('levelUI');
+        for(let i=0; i<ui.children.length; i++) {
+            ui.children[i].classList.toggle('active', i === state.levelStep);
+        }
+    }
+    function spawnLevelTarget() {
+        let safe = state.dots.filter(d => d !== state.entities[0].curDot);
+        let t = safe[Math.floor(Math.random()*safe.length)];
+        t.item = state.levelStep % 3; t.targetScale = 1;
     }
 
-    function collectTarget(dot) {
-        AudioSys.playCollect(state.step);
-        spawnParticles(dot.x, dot.y, 2);
-        state.shake = 10;
-        uiIcons[state.step].classList.add('done');
-        uiIcons[state.step].innerText = '✔';
-        uiIcons[state.step].classList.remove('active');
-        
-        state.step++;
-        if(state.step >= 3) setTimeout(nextLevel, 1200);
-        else { spawnNextTarget(); updateUI(); }
+    function checkLogic(entity, dot) {
+        let hit = false;
+        if(CONFIG.mode === 'level') {
+            if(!entity.isAI && dot.item === state.levelStep % 3) {
+                hit = true; state.levelStep++;
+                document.getElementById('levelUI').children[state.levelStep-1].classList.add('done');
+                if(state.levelStep >= CONFIG.targetCount) endGame('闯关成功!');
+                else { spawnLevelTarget(); updateLevelUI(); }
+            }
+        } else {
+            if(dot.item === state.vsTargetType) {
+                hit = true;
+                if(entity.isAI) { state.aiScore++; document.getElementById('aiScoreVal').innerText=state.aiScore; }
+                else { state.p1Score++; document.getElementById('p1ScoreVal').innerText=state.p1Score; }
+                if(state.p1Score >= CONFIG.winScore) endGame('你赢了!');
+                else if(state.aiScore >= CONFIG.winScore) endGame('AI 赢了!');
+                else spawnVersusItems();
+            }
+        }
+        if(hit) {
+            AudioSys.win(); spawnParticles(dot.x, dot.y, COLORS.items[0]); state.shake = 10;
+            dot.item = -1; dot.targetScale = 0;
+        } else if(dot.item !== -1) {
+            entity.triggerReturn();
+        }
     }
 
-    function nextLevel() { state.level++; lvlNumEl.innerText=state.level; initLevel(); }
-    function updateUI() { if(state.step<3) { uiIcons[state.step].classList.add('active'); uiIcons[state.step].innerText=CONFIG.shapes[state.step]; } }
-
-    function spawnParticles(x, y, type) {
-        // type 0: wall hit, type 2: collect
-        const color = type===0 ? CONFIG.colors.wall : CONFIG.colors.star;
-        for(let i=0; i<10; i++) state.particles.push({x:x, y:y, vx:(Math.random()-0.5)*8, vy:(Math.random()-0.5)*8, life:1, color:color});
+    function endGame(msg) {
+        state.running = false;
+        document.getElementById('msgTitle').innerText = msg;
+        document.getElementById('msgOverlay').style.display = 'flex';
+        setTimeout(()=>document.getElementById('msgOverlay').style.opacity = 1, 10);
     }
 
-    // ================= 主循环 =================
     function loop() {
+        requestAnimationFrame(loop);
         let sx=0, sy=0;
-        if(state.shake>0) { sx=(Math.random()-0.5)*state.shake; sy=(Math.random()-0.5)*state.shake; state.shake*=0.9; }
-        ctx.setTransform(1,0,0,1,sx,sy);
-        ctx.clearRect(0,0,canvas.width,canvas.height);
+        if(state.shake>0) { sx=(Math.random()-.5)*state.shake; sy=(Math.random()-.5)*state.shake; state.shake*=0.9; }
+        ctx.setTransform(1,0,0,1,sx,sy); ctx.clearRect(0,0,canvas.width,canvas.height);
 
-        // 画墙
         state.walls.forEach(w => w.draw());
-
-        // 画轨迹 (成功的连线)
-        if(state.trail.length>0) {
-            ctx.beginPath();
-            state.trail.forEach(t=>{ctx.moveTo(t.x1,t.y1); ctx.lineTo(t.x2,t.y2)});
-            ctx.strokeStyle=CONFIG.colors.trail; ctx.lineWidth=4; ctx.lineCap='round'; ctx.stroke();
-        }
-
-        state.dots.forEach(d => {d.update(); d.draw()});
-
-        if(state.player) {
-            state.player.update();
-            state.player.draw();
-        }
-
-        // 粒子
+        state.trail.forEach(t => {
+            ctx.beginPath(); ctx.moveTo(t.x1,t.y1); ctx.lineTo(t.x2,t.y2);
+            ctx.strokeStyle=t.c; ctx.lineWidth=4; ctx.stroke();
+        });
+        state.dots.forEach(d => { d.update(); d.draw(); });
+        state.entities.forEach(e => { e.update(); e.draw(); });
+        
         for(let i=state.particles.length-1; i>=0; i--) {
             let p = state.particles[i];
             p.x+=p.vx; p.y+=p.vy; p.life-=0.05;
-            ctx.globalAlpha=p.life; ctx.fillStyle=p.color; 
-            ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill();
+            ctx.globalAlpha=p.life; ctx.fillStyle=p.c; ctx.beginPath(); ctx.arc(p.x,p.y,5,0,Math.PI*2); ctx.fill();
             if(p.life<=0) state.particles.splice(i,1);
         }
         ctx.globalAlpha=1;
-
-        requestAnimationFrame(loop);
     }
 
-    window.addEventListener('mousedown', (e)=>{ e.preventDefault(); AudioSys.init(); state.player.shoot(); });
-    window.addEventListener('touchstart', (e)=>{ e.preventDefault(); AudioSys.init(); state.player.shoot(); }, {passive:false});
+    function input(e) {
+        if(e.target.tagName !== 'CANVAS') return;
+        e.preventDefault(); AudioSys.init();
+        if(state.running && state.entities[0]) state.entities[0].shoot();
+    }
+    window.addEventListener('mousedown', input); window.addEventListener('touchstart', input, {passive:false});
 
-    initLevel();
+    applySettings();
     loop();
 
 </script>
