@@ -3,99 +3,64 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>连线寻宝 - 3x3 音效版</title>
+    <title>连线寻宝 - 溜溜球与斜墙</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&display=swap');
 
         body {
-            margin: 0;
-            padding: 0;
-            background-color: #FFF0F5; /* 更加粉嫩的背景 */
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            overflow: hidden;
+            margin: 0; padding: 0;
+            background-color: #F3E5F5; /* 淡紫色背景 */
+            display: flex; justify-content: center; align-items: center;
+            height: 100vh; overflow: hidden;
             font-family: 'Fredoka One', cursive;
-            touch-action: none;
-            user-select: none;
+            touch-action: none; user-select: none;
         }
 
         #gameContainer {
             position: relative;
-            width: 100%;
-            height: 100%;
-            max-width: 60vh;
-            max-height: 100vh;
+            width: 100%; height: 100%;
+            max-width: 60vh; max-height: 100vh;
             background: #fff;
-            box-shadow: 0 10px 40px rgba(255, 100, 150, 0.15);
-            border-radius: 8px;
-            overflow: hidden;
+            box-shadow: 0 10px 40px rgba(150, 100, 200, 0.15);
+            border-radius: 12px; overflow: hidden;
         }
 
         canvas { display: block; width: 100%; height: 100%; }
 
         #targetBar {
-            position: absolute;
-            top: 50px;
-            width: 100%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 20px;
-            pointer-events: none;
-            z-index: 10;
+            position: absolute; top: 60px; width: 100%;
+            display: flex; justify-content: center; align-items: center;
+            gap: 20px; pointer-events: none; z-index: 10;
         }
 
         .target-icon {
-            width: 50px;
-            height: 50px;
-            background: #F8F8F8;
-            border-radius: 50%;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 24px;
-            color: #DDD;
-            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); /* 弹性动画 */
+            width: 50px; height: 50px;
+            background: #FAFAFA; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            font-size: 24px; color: #E0E0E0;
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
         }
-
         .target-icon.active {
-            transform: scale(1.3);
-            background: #fff;
-            box-shadow: 0 5px 20px rgba(255, 138, 128, 0.3);
-            border: 3px solid #FF8A80;
-            color: #FF8A80;
+            transform: scale(1.3); background: #fff;
+            border: 3px solid #AB47BC; color: #AB47BC;
+            box-shadow: 0 5px 20px rgba(171, 71, 188, 0.3);
         }
-
         .target-icon.done {
-            background: #FF8A80;
-            color: #fff;
-            transform: scale(1);
+            background: #AB47BC; color: #fff; transform: scale(1);
         }
 
         #levelIndicator {
-            position: absolute;
-            bottom: 40px;
-            width: 100%;
-            text-align: center;
-            color: #FFCDD2;
-            font-size: 20px;
-            letter-spacing: 2px;
+            position: absolute; bottom: 50px; width: 100%;
+            text-align: center; color: #CE93D8;
+            font-size: 24px; letter-spacing: 2px;
         }
-
-        #startHint {
-            position: absolute;
-            top: 60%;
-            width: 100%;
-            text-align: center;
-            color: #AAA;
-            font-size: 18px;
-            pointer-events: none;
-            animation: float 2s infinite ease-in-out;
+        
+        #hint {
+            position: absolute; bottom: 120px; width: 100%;
+            text-align: center; color: #BA68C8; font-size: 16px;
+            opacity: 0.8; pointer-events: none;
         }
-        @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-10px)} }
-
     </style>
 </head>
 <body>
@@ -109,431 +74,385 @@
         <div id="icon2" class="target-icon">☀</div>
     </div>
 
-    <div id="startHint">点击屏幕开启音效并开始</div>
+    <div id="hint">小心斜向的障碍墙！</div>
     <div id="levelIndicator">LEVEL <span id="lvlNum">1</span></div>
 </div>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const startHint = document.getElementById('startHint');
     const lvlNumEl = document.getElementById('lvlNum');
-    const uiIcons = [
-        document.getElementById('icon0'),
-        document.getElementById('icon1'),
-        document.getElementById('icon2')
-    ];
+    const uiIcons = [document.getElementById('icon0'), document.getElementById('icon1'), document.getElementById('icon2')];
 
-    // ================= 音效管理器 (Web Audio API) =================
+    // ================= 音效系统 =================
     const AudioSys = {
         ctx: null,
         init: function() {
-            if (!this.ctx) {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                this.ctx = new AudioContext();
-            }
-            if (this.ctx.state === 'suspended') {
-                this.ctx.resume();
-            }
+            if (!this.ctx) this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            if (this.ctx.state === 'suspended') this.ctx.resume();
         },
-        // 播放单音
-        playTone: function(freq, type, duration, vol=0.1) {
+        playTone: function(freq, type, dur, vol=0.1) {
             if(!this.ctx) return;
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            
-            osc.type = type; // sine, square, triangle
-            osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
-            
+            const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+            osc.type = type; osc.frequency.value = freq;
             gain.gain.setValueAtTime(vol, this.ctx.currentTime);
-            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
-
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            
-            osc.start();
-            osc.stop(this.ctx.currentTime + duration);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + dur);
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            osc.start(); osc.stop(this.ctx.currentTime + dur);
         },
-        // 发射音效 (啾~)
+        // 溜溜球弹回音效 (Boing~)
+        playBoing: function() {
+            if(!this.ctx) return;
+            const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
+            osc.type = 'sine';
+            // 频率先降后升，模拟弹簧
+            osc.frequency.setValueAtTime(300, this.ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(150, this.ctx.currentTime + 0.1);
+            osc.frequency.linearRampToValueAtTime(400, this.ctx.currentTime + 0.3);
+            
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+            gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+            
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            osc.start(); osc.stop(this.ctx.currentTime + 0.3);
+        },
         playShoot: function() {
             if(!this.ctx) return;
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            osc.type = 'triangle';
-            // 频率从高到低滑落
+            const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
             osc.frequency.setValueAtTime(600, this.ctx.currentTime);
             osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.15);
-            
             gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
             gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.15);
-            
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start();
-            osc.stop(this.ctx.currentTime + 0.15);
+            osc.connect(gain); gain.connect(this.ctx.destination);
+            osc.start(); osc.stop(this.ctx.currentTime + 0.15);
         },
-        // 吃到东西 (根据阶段播放不同音效)
         playCollect: function(step) {
-            if(!this.ctx) return;
-            // step 0: Star, step 1: Moon, step 2: Sun
-            
-            if (step === 0) {
-                // 星星: 清脆的 'Do' (C5)
-                this.playTone(523.25, 'sine', 0.3, 0.2);
-                setTimeout(() => this.playTone(1046, 'sine', 0.1, 0.05), 50); // 泛音
-            } else if (step === 1) {
-                // 月亮: 柔和的 'Mi' (E5)
-                this.playTone(659.25, 'sine', 0.4, 0.2);
-                setTimeout(() => this.playTone(659.25 * 1.5, 'sine', 0.2, 0.05), 80);
-            } else if (step === 2) {
-                // 太阳: 胜利和弦! (C Major Arpeggio)
-                const now = this.ctx.currentTime;
-                this.playNote(523.25, now, 0.1);       // C5
-                this.playNote(659.25, now + 0.08, 0.1); // E5
-                this.playNote(783.99, now + 0.16, 0.1); // G5
-                this.playNote(1046.5, now + 0.24, 0.4); // C6 (Long)
+            if(step===0) { this.playTone(523, 'sine', 0.3); setTimeout(()=>this.playTone(1046,'sine',0.1),50); }
+            else if(step===1) { this.playTone(659, 'sine', 0.4); setTimeout(()=>this.playTone(987,'sine',0.2),80); }
+            else { 
+                const t = this.ctx.currentTime;
+                this.playTone(523, 'sine', 0.1); setTimeout(()=>this.playTone(659,'sine',0.1),80);
+                setTimeout(()=>this.playTone(783,'sine',0.1),160); setTimeout(()=>this.playTone(1046,'sine',0.4),240);
             }
-        },
-        playNote: function(freq, time, duration) {
-            const osc = this.ctx.createOscillator();
-            const gain = this.ctx.createGain();
-            osc.type = 'sine';
-            osc.frequency.value = freq;
-            gain.gain.setValueAtTime(0.2, time);
-            gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
-            osc.connect(gain);
-            gain.connect(this.ctx.destination);
-            osc.start(time);
-            osc.stop(time + duration);
-        },
-        playFail: function() {
-            if(!this.ctx) return;
-            // 低沉的噗噗声
-            this.playTone(150, 'sawtooth', 0.1, 0.05);
         }
     };
 
     // ================= 配置 =================
     const CONFIG = {
-        gridRows: 3,
-        gridCols: 3,
-        dotRadius: 8,
-        playerRadius: 10,
-        orbitRadius: 45,
+        gridSize: 3,
+        orbitRadius: 40,
         rotationSpeed: 0.05,
-        moveSpeed: 14,
+        moveSpeed: 16,
+        returnSpeed: 0.15, // 溜溜球收回的速度系数 (Lerp)
         colors: {
-            bg: '#FFFFFF',
-            dot: '#EEEEEE',
-            player: '#FF8A80',
-            trail: '#FFCDD2',
-            star: '#FFD54F',
-            moon: '#7986CB',
-            sun: '#FF7043'
+            bg: '#F3E5F5',
+            dot: '#E1BEE7',
+            player: '#AB47BC', // 紫色系
+            trail: '#E1BEE7',  // 成功的连线
+            yoyoString: '#BA68C8', // 溜溜球的绳子
+            wall: '#FF7043',   // 橙色障碍墙，对比明显
+            star: '#FFD54F', moon: '#7986CB', sun: '#FF7043'
         },
         shapes: ['⭐', '🌙', '☀']
     };
 
     let state = {
-        level: 1,
-        step: 0,
-        dots: [],
-        player: null,
-        trail: [], 
-        targetDotIndex: -1,
-        particles: [],
-        shake: 0
+        level: 1, step: 0, dots: [], walls: [], 
+        player: null, trail: [], targetDotIndex: -1, particles: [], shake: 0
     };
 
-    // ================= 图形绘制 (保持不变) =================
-    function drawStar(x, y, r, color) {
-        ctx.save(); ctx.translate(x, y); ctx.beginPath(); ctx.fillStyle = color;
-        for(let i=0; i<5; i++){
-            ctx.lineTo(Math.cos((18+i*72)/180*Math.PI)*r, -Math.sin((18+i*72)/180*Math.PI)*r);
-            ctx.lineTo(Math.cos((54+i*72)/180*Math.PI)*(r*0.5), -Math.sin((54+i*72)/180*Math.PI)*(r*0.5));
-        }
-        ctx.closePath(); ctx.fill(); ctx.restore();
-    }
-    function drawMoon(x, y, r, color) {
-        ctx.save(); ctx.translate(x, y); ctx.beginPath();
-        ctx.arc(0, 0, r, 0, Math.PI*2); ctx.fillStyle = color; ctx.fill();
-        ctx.globalCompositeOperation = 'destination-out';
-        ctx.beginPath(); ctx.arc(r*0.3, -r*0.3, r*0.8, 0, Math.PI*2); ctx.fill();
-        ctx.globalCompositeOperation = 'source-over'; ctx.restore();
-    }
-    function drawSun(x, y, r, color) {
-        ctx.save(); ctx.translate(x, y);
-        ctx.strokeStyle = color; ctx.lineWidth = 2;
-        for(let i=0; i<8; i++) {
-            ctx.rotate(Math.PI/4); ctx.beginPath(); ctx.moveTo(r*0.6, 0); ctx.lineTo(r*1.2, 0); ctx.stroke();
-        }
-        ctx.beginPath(); ctx.arc(0, 0, r*0.6, 0, Math.PI*2); ctx.fillStyle = color; ctx.fill(); ctx.restore();
-    }
-
-    // ================= 粒子与特效 =================
-    class Particle {
-        constructor(x, y, color, speedMulti) {
-            this.x = x; this.y = y;
-            const angle = Math.random() * Math.PI * 2;
-            const speed = (Math.random() * 3 + 2) * speedMulti;
-            this.vx = Math.cos(angle) * speed;
-            this.vy = Math.sin(angle) * speed;
-            this.life = 1.0;
-            this.decay = Math.random() * 0.03 + 0.02;
-            this.color = color;
-            this.size = Math.random() * 5 + 3;
-        }
-        update() {
-            this.x += this.vx; this.y += this.vy;
-            this.vy += 0.15; // 重力
-            this.life -= this.decay;
-            this.size *= 0.95;
-        }
-        draw() {
-            ctx.globalAlpha = this.life; ctx.fillStyle = this.color;
-            ctx.beginPath(); ctx.arc(this.x, this.y, this.size, 0, Math.PI*2); ctx.fill();
-            ctx.globalAlpha = 1.0;
-        }
-    }
-
-    function spawnParticles(x, y, intensity) {
-        let count = 12 * intensity;
-        let colors = [];
-        if(intensity === 1) colors = [CONFIG.colors.star, '#FFF'];
-        if(intensity === 2) colors = [CONFIG.colors.moon, '#E040FB', '#FFF'];
-        if(intensity === 3) colors = [CONFIG.colors.sun, '#FF5252', '#FFD740', '#FFFFFF'];
-
-        for(let i=0; i<count; i++) {
-            const col = colors[Math.floor(Math.random()*colors.length)];
-            state.particles.push(new Particle(x, y, col, 1 + intensity*0.3));
-        }
-    }
-
-    // ================= 游戏逻辑 =================
     class Dot {
-        constructor(x, y, index) {
-            this.x = x; this.y = y; this.index = index;
+        constructor(x, y, r, c, idx) {
+            this.x = x; this.y = y; this.r = r; this.c = c; this.index = idx;
             this.scale = 0; this.targetScale = 1;
         }
-        update() {
-            if(this.scale < this.targetScale) this.scale += (this.targetScale - this.scale) * 0.15;
+        update() { if(this.scale < this.targetScale) this.scale += (this.targetScale-this.scale)*0.15; }
+        draw() {
+            ctx.beginPath(); ctx.arc(this.x, this.y, 8, 0, Math.PI*2);
+            ctx.fillStyle = CONFIG.colors.dot; ctx.fill();
+            if(state.targetDotIndex === this.index) {
+                const s = this.scale;
+                const floatY = Math.sin(Date.now()/200)*3;
+                drawIcon(this.x, this.y+floatY, 18*s, state.step);
+            }
+        }
+    }
+
+    class Wall {
+        constructor(dotA, dotB) {
+            this.x1 = dotA.x; this.y1 = dotA.y;
+            this.x2 = dotB.x; this.y2 = dotB.y;
         }
         draw() {
-            ctx.beginPath(); ctx.arc(this.x, this.y, CONFIG.dotRadius, 0, Math.PI * 2);
-            ctx.fillStyle = CONFIG.colors.dot; ctx.fill();
-            if (state.targetDotIndex === this.index) {
-                const s = this.scale;
-                const r = 18 * s;
-                const floatY = Math.sin(Date.now() / 200) * 3;
-                if (state.step === 0) drawStar(this.x, this.y + floatY, r, CONFIG.colors.star);
-                else if (state.step === 1) drawMoon(this.x, this.y + floatY, r, CONFIG.colors.moon);
-                else if (state.step === 2) drawSun(this.x, this.y + floatY, r, CONFIG.colors.sun);
-            }
+            ctx.beginPath();
+            ctx.moveTo(this.x1, this.y1);
+            ctx.lineTo(this.x2, this.y2);
+            ctx.lineWidth = 6;
+            ctx.strokeStyle = CONFIG.colors.wall;
+            ctx.lineCap = 'round';
+            ctx.stroke();
+            
+            // 绘制斜线纹理
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+            ctx.stroke();
         }
     }
 
     class Player {
         constructor(startDot) {
             this.currentDot = startDot;
-            this.angle = -Math.PI / 2;
-            this.state = 'rotating';
-            this.velocity = {x: 0, y: 0};
+            this.angle = -Math.PI/2;
+            this.state = 'rotating'; // rotating, flying, returning
+            this.pos = {x:0, y:0};
             this.updatePos();
         }
         updatePos() {
-            this.x = this.currentDot.x + Math.cos(this.angle) * CONFIG.orbitRadius;
-            this.y = this.currentDot.y + Math.sin(this.angle) * CONFIG.orbitRadius;
+            this.pos.x = this.currentDot.x + Math.cos(this.angle) * CONFIG.orbitRadius;
+            this.pos.y = this.currentDot.y + Math.sin(this.angle) * CONFIG.orbitRadius;
         }
         update() {
-            if (this.state === 'rotating') {
+            if(this.state === 'rotating') {
                 this.angle += CONFIG.rotationSpeed;
                 this.updatePos();
-            } else if (this.state === 'flying') {
-                this.x += this.velocity.x;
-                this.y += this.velocity.y;
-                if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) {
-                    this.returnToBase();
+            } 
+            else if(this.state === 'flying') {
+                const prevX = this.pos.x;
+                const prevY = this.pos.y;
+                this.pos.x += this.velocity.x;
+                this.pos.y += this.velocity.y;
+
+                // 墙壁碰撞检测 -> 触发溜溜球回弹
+                if(checkWallCollision(prevX, prevY, this.pos.x, this.pos.y)) {
+                    this.triggerYoYoReturn();
                     return;
                 }
-                for (let dot of state.dots) {
-                    if (dot === this.currentDot) continue;
-                    const dist = Math.hypot(this.x - dot.x, this.y - dot.y);
-                    if (dist < CONFIG.orbitRadius + 5) {
-                        this.landOn(dot);
+
+                // 边界检测 -> 触发溜溜球回弹
+                if(this.pos.x<0 || this.pos.x>canvas.width || this.pos.y<0 || this.pos.y>canvas.height) {
+                    this.triggerYoYoReturn();
+                    return;
+                }
+
+                // 吸附
+                for(let d of state.dots) {
+                    if(d === this.currentDot) continue;
+                    if(Math.hypot(this.pos.x-d.x, this.pos.y-d.y) < CONFIG.orbitRadius+5) {
+                        this.landOn(d);
                         return;
                     }
                 }
             }
+            else if(this.state === 'returning') {
+                // 溜溜球收回逻辑 (Lerp 插值)
+                const tx = this.currentDot.x;
+                const ty = this.currentDot.y;
+                
+                this.pos.x += (tx - this.pos.x) * CONFIG.returnSpeed;
+                this.pos.y += (ty - this.pos.y) * CONFIG.returnSpeed;
+                
+                // 如果距离足够近，恢复旋转
+                if(Math.hypot(this.pos.x-tx, this.pos.y-ty) < 10) {
+                    this.state = 'rotating';
+                    // 重置角度为当前相对于圆心的角度，避免跳变
+                    this.angle = Math.atan2(this.pos.y-ty, this.pos.x-tx);
+                }
+            }
         }
         shoot() {
-            if (this.state === 'rotating') {
-                // 【音效】发射
+            if(this.state === 'rotating') {
                 AudioSys.playShoot();
-                
                 this.state = 'flying';
-                const angle = Math.atan2(this.y - this.currentDot.y, this.x - this.currentDot.x);
-                this.velocity.x = Math.cos(angle) * CONFIG.moveSpeed;
-                this.velocity.y = Math.sin(angle) * CONFIG.moveSpeed;
-                startHint.style.display = 'none';
+                const angle = Math.atan2(this.pos.y-this.currentDot.y, this.pos.x-this.currentDot.x);
+                this.velocity = {x: Math.cos(angle)*CONFIG.moveSpeed, y: Math.sin(angle)*CONFIG.moveSpeed};
             }
         }
-        returnToBase() {
-            // 【音效】失败/撞墙
-            AudioSys.playFail();
-            state.trail = [];
-            this.state = 'rotating';
-            this.velocity = {x:0, y:0};
-            this.updatePos();
+        triggerYoYoReturn() {
+            AudioSys.playBoing();
             state.shake = 5;
+            spawnParticles(this.pos.x, this.pos.y, 0); // 碰撞火花
+            this.state = 'returning';
+            // 可以在这里清除之前的连线（如果需要惩罚），或者保留
+            // state.trail = []; 
         }
         landOn(newDot) {
-            state.trail.push({x1: this.currentDot.x, y1: this.currentDot.y, x2: newDot.x, y2: newDot.y});
+            state.trail.push({x1:this.currentDot.x, y1:this.currentDot.y, x2:newDot.x, y2:newDot.y});
             this.state = 'rotating';
             this.currentDot = newDot;
-            this.angle = Math.atan2(this.y - newDot.y, this.x - newDot.x);
-            if (newDot.index === state.targetDotIndex) {
-                this.collectTarget(newDot);
+            this.angle = Math.atan2(this.pos.y-newDot.y, this.pos.x-newDot.x);
+            if(newDot.index === state.targetDotIndex) collectTarget(newDot);
+        }
+        draw() {
+            // 如果在飞行或收回，画出溜溜球的绳子
+            if(this.state === 'flying' || this.state === 'returning') {
+                ctx.beginPath();
+                ctx.moveTo(this.currentDot.x, this.currentDot.y);
+                ctx.lineTo(this.pos.x, this.pos.y);
+                ctx.strokeStyle = CONFIG.colors.yoyoString;
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]); // 虚线看起来更像绳子
+                ctx.stroke();
+                ctx.setLineDash([]);
             }
-        }
-        collectTarget(dot) {
-            const step = state.step;
+
+            // 画球
+            ctx.beginPath(); ctx.arc(this.pos.x, this.pos.y, 10, 0, Math.PI*2);
+            ctx.fillStyle=CONFIG.colors.player; ctx.fill();
             
-            // 【音效】吃到目标
-            AudioSys.playCollect(step);
-
-            spawnParticles(dot.x, dot.y, step + 1);
-            state.shake = (step + 1) * 4;
-            
-            const icon = uiIcons[step];
-            icon.classList.remove('active');
-            icon.classList.add('done');
-            icon.innerText = '✔';
-
-            state.step++;
-            if (state.step >= 3) {
-                setTimeout(nextLevel, 1200);
-            } else {
-                spawnNextTarget();
-                updateUI();
-            }
+            // 画高光
+            ctx.beginPath(); ctx.arc(this.pos.x-3, this.pos.y-3, 3, 0, Math.PI*2);
+            ctx.fillStyle='#fff'; ctx.fill();
         }
     }
 
-    // ================= 流程控制 =================
-    function spawnNextTarget() {
-        let candidates = state.dots.filter(d => d !== state.player.currentDot);
-        let nextDot = candidates[Math.floor(Math.random() * candidates.length)];
-        state.targetDotIndex = nextDot.index;
-        nextDot.scale = 0;
-    }
-
-    function updateUI() {
-        if (state.step < 3) {
-            const currIcon = uiIcons[state.step];
-            currIcon.classList.add('active');
-            currIcon.innerText = CONFIG.shapes[state.step];
+    // ================= 辅助函数 =================
+    function checkWallCollision(x1, y1, x2, y2) {
+        for(let w of state.walls) {
+            if(getLineIntersection(x1, y1, x2, y2, w.x1, w.y1, w.x2, w.y2)) return true;
         }
+        return false;
     }
 
+    function getLineIntersection(p0_x, p0_y, p1_x, p1_y, p2_x, p2_y, p3_x, p3_y) {
+        let s1_x, s1_y, s2_x, s2_y;
+        s1_x = p1_x - p0_x; s1_y = p1_y - p0_y;
+        s2_x = p3_x - p2_x; s2_y = p3_y - p2_y;
+        let s, t, denom = -s2_x * s1_y + s1_x * s2_y;
+        if (denom === 0) return false;
+        s = (-s1_y * (p0_x - p2_x) + s1_x * (p0_y - p2_y)) / denom;
+        t = (s2_x * (p0_y - p2_y) - s2_y * (p0_x - p2_x)) / denom;
+        return (s >= 0 && s <= 1 && t >= 0 && t <= 1);
+    }
+
+    function drawIcon(x, y, r, type) {
+        ctx.save(); ctx.translate(x,y);
+        if(type===0) { 
+            ctx.beginPath(); ctx.fillStyle = CONFIG.colors.star;
+            for(let i=0;i<5;i++){ ctx.lineTo(Math.cos((18+i*72)/180*Math.PI)*r, -Math.sin((18+i*72)/180*Math.PI)*r); ctx.lineTo(Math.cos((54+i*72)/180*Math.PI)*r*0.5, -Math.sin((54+i*72)/180*Math.PI)*r*0.5); }
+            ctx.fill();
+        } else if(type===1) {
+            ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fillStyle=CONFIG.colors.moon; ctx.fill();
+            ctx.globalCompositeOperation='destination-out'; ctx.beginPath(); ctx.arc(r*0.3,-r*0.3,r*0.8,0,Math.PI*2); ctx.fill();
+            ctx.globalCompositeOperation='source-over';
+        } else {
+            ctx.strokeStyle=CONFIG.colors.sun; ctx.lineWidth=2;
+            for(let i=0;i<8;i++){ ctx.rotate(Math.PI/4); ctx.beginPath(); ctx.moveTo(r*0.6,0); ctx.lineTo(r*1.2,0); ctx.stroke(); }
+            ctx.beginPath(); ctx.arc(0,0,r*0.6,0,Math.PI*2); ctx.fillStyle=CONFIG.colors.sun; ctx.fill();
+        }
+        ctx.restore();
+    }
+
+    // ================= 游戏流程 =================
     function initLevel() {
-        state.step = 0;
-        state.trail = [];
-        state.dots = [];
-        state.particles = [];
-        state.targetDotIndex = -1;
-
-        const marginX = 150;
-        const marginY = 400;
-        const w = canvas.width - marginX * 2;
-        const h = canvas.height - marginY * 2;
-        const size = Math.min(w, h);
+        state.step = 0; state.trail = []; state.dots = []; state.walls = []; state.particles = [];
+        
+        const mX = 150, mY = 400;
+        const size = Math.min(canvas.width - mX*2, canvas.height - mY*2);
         const step = size / 2;
-
-        let index = 0;
+        let idx = 0;
+        
+        // 生成点
         for(let r=0; r<3; r++){
             for(let c=0; c<3; c++){
-                const ox = (canvas.width - size) / 2;
-                const oy = (canvas.height - size) / 2 + 50;
-                state.dots.push(new Dot(ox + c*step, oy + r*step, index++));
+                state.dots.push(new Dot((canvas.width-size)/2 + c*step, (canvas.height-size)/2+50 + r*step, r, c, idx++));
+            }
+        }
+
+        // 生成斜向障碍墙
+        // 规则：Level 2 开始有墙。连接对角线邻居。
+        const wallCount = state.level === 1 ? 0 : (state.level === 2 ? 1 : 2);
+        
+        let attempts = 0;
+        while(state.walls.length < wallCount && attempts < 50) {
+            attempts++;
+            const dotA = state.dots[Math.floor(Math.random()*state.dots.length)];
+            // 寻找对角线邻居: 行差1且列差1
+            const diagonalNeighbors = state.dots.filter(d => Math.abs(d.r-dotA.r) === 1 && Math.abs(d.c-dotA.c) === 1);
+            
+            if(diagonalNeighbors.length > 0) {
+                const dotB = diagonalNeighbors[Math.floor(Math.random()*diagonalNeighbors.length)];
+                // 检查重复
+                if(!state.walls.some(w => (w.x1===dotA.x && w.x2===dotB.x) || (w.x1===dotB.x && w.x2===dotA.x))) {
+                    state.walls.push(new Wall(dotA, dotB));
+                }
             }
         }
 
         const startDot = state.dots[6];
         state.player = new Player(startDot);
-
-        uiIcons.forEach((icon, idx) => {
-            icon.className = 'target-icon';
-            icon.innerText = CONFIG.shapes[idx];
-        });
         
+        uiIcons.forEach((i,x)=>{i.className='target-icon'; i.innerText=CONFIG.shapes[x]});
         updateUI();
         spawnNextTarget();
     }
 
-    function nextLevel() {
-        state.level++;
-        lvlNumEl.innerText = state.level;
-        initLevel();
+    function spawnNextTarget() {
+        let cands = state.dots.filter(d => d !== state.player.currentDot);
+        state.targetDotIndex = cands[Math.floor(Math.random()*cands.length)].index;
+        state.dots[state.targetDotIndex].scale = 0;
     }
 
+    function collectTarget(dot) {
+        AudioSys.playCollect(state.step);
+        spawnParticles(dot.x, dot.y, 2);
+        state.shake = 10;
+        uiIcons[state.step].classList.add('done');
+        uiIcons[state.step].innerText = '✔';
+        uiIcons[state.step].classList.remove('active');
+        
+        state.step++;
+        if(state.step >= 3) setTimeout(nextLevel, 1200);
+        else { spawnNextTarget(); updateUI(); }
+    }
+
+    function nextLevel() { state.level++; lvlNumEl.innerText=state.level; initLevel(); }
+    function updateUI() { if(state.step<3) { uiIcons[state.step].classList.add('active'); uiIcons[state.step].innerText=CONFIG.shapes[state.step]; } }
+
+    function spawnParticles(x, y, type) {
+        // type 0: wall hit, type 2: collect
+        const color = type===0 ? CONFIG.colors.wall : CONFIG.colors.star;
+        for(let i=0; i<10; i++) state.particles.push({x:x, y:y, vx:(Math.random()-0.5)*8, vy:(Math.random()-0.5)*8, life:1, color:color});
+    }
+
+    // ================= 主循环 =================
     function loop() {
-        let sx = 0, sy = 0;
-        if (state.shake > 0) {
-            sx = (Math.random() - 0.5) * state.shake;
-            sy = (Math.random() - 0.5) * state.shake;
-            state.shake *= 0.9;
-        }
+        let sx=0, sy=0;
+        if(state.shake>0) { sx=(Math.random()-0.5)*state.shake; sy=(Math.random()-0.5)*state.shake; state.shake*=0.9; }
+        ctx.setTransform(1,0,0,1,sx,sy);
+        ctx.clearRect(0,0,canvas.width,canvas.height);
 
-        ctx.setTransform(1, 0, 0, 1, sx, sy);
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // 画墙
+        state.walls.forEach(w => w.draw());
 
-        if (state.trail.length > 0) {
+        // 画轨迹 (成功的连线)
+        if(state.trail.length>0) {
             ctx.beginPath();
-            for (let l of state.trail) {
-                ctx.moveTo(l.x1, l.y1);
-                ctx.lineTo(l.x2, l.y2);
-            }
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            ctx.lineWidth = 4;
-            ctx.strokeStyle = CONFIG.colors.trail;
-            ctx.stroke();
-            // 内描边
-            ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-            ctx.lineWidth = 1;
-            ctx.stroke();
+            state.trail.forEach(t=>{ctx.moveTo(t.x1,t.y1); ctx.lineTo(t.x2,t.y2)});
+            ctx.strokeStyle=CONFIG.colors.trail; ctx.lineWidth=4; ctx.lineCap='round'; ctx.stroke();
         }
 
-        state.dots.forEach(d => { d.update(); d.draw(); });
+        state.dots.forEach(d => {d.update(); d.draw()});
 
-        if (state.player) {
+        if(state.player) {
             state.player.update();
-            ctx.beginPath();
-            ctx.arc(state.player.x, state.player.y, CONFIG.playerRadius, 0, Math.PI*2);
-            ctx.fillStyle = CONFIG.colors.player;
-            ctx.shadowBlur = 10; ctx.shadowColor = CONFIG.colors.player; ctx.fill(); ctx.shadowBlur = 0;
-            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(state.player.x-3, state.player.y-3, 3, 0, Math.PI*2); ctx.fill();
+            state.player.draw();
         }
 
-        for (let i = state.particles.length - 1; i >= 0; i--) {
+        // 粒子
+        for(let i=state.particles.length-1; i>=0; i--) {
             let p = state.particles[i];
-            p.update();
-            p.draw();
-            if (p.life <= 0) state.particles.splice(i, 1);
+            p.x+=p.vx; p.y+=p.vy; p.life-=0.05;
+            ctx.globalAlpha=p.life; ctx.fillStyle=p.color; 
+            ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI*2); ctx.fill();
+            if(p.life<=0) state.particles.splice(i,1);
         }
+        ctx.globalAlpha=1;
 
         requestAnimationFrame(loop);
     }
 
-    // 处理交互（同时初始化音效）
-    function handleInput(e) {
-        e.preventDefault();
-        AudioSys.init(); // 浏览器要求用户交互后才能播放声音
-        state.player.shoot();
-    }
-
-    window.addEventListener('mousedown', handleInput);
-    window.addEventListener('touchstart', handleInput, {passive: false});
+    window.addEventListener('mousedown', (e)=>{ e.preventDefault(); AudioSys.init(); state.player.shoot(); });
+    window.addEventListener('touchstart', (e)=>{ e.preventDefault(); AudioSys.init(); state.player.shoot(); }, {passive:false});
 
     initLevel();
     loop();
