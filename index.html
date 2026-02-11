@@ -22,15 +22,24 @@
         }
 
         /* === 主容器：左右布局，居中显示 === */
+        /* 找到 #mainWrapper 并修改为： */
         #mainWrapper {
             display: flex;
-            align-items: stretch;
+            align-items: center;      /* 改为 center，垂直居中更美观 */
+            justify-content: center;  /* 水平居中 */
             background: #FFF;
             padding: 10px;
             border-radius: 24px;
             box-shadow: 0 20px 60px rgba(106, 27, 154, 0.15);
+            
+            /* 关键修改：宽高限制 */
+            width: 98vw;              /* 留一点边距 */
+            height: 95vh;             /* 留一点边距 */
+            max-width: 100%;
             max-height: 95vh;
+            
             gap: 10px;
+            overflow: hidden;         /* 防止内部元素溢出 */
         }
 
         /* === 左侧：设置面板 (美化版) === */
@@ -103,12 +112,20 @@
             background: #F3E5F5; padding: 10px; border-radius: 8px;
         }
 
-        /* === 右侧：游戏画面 === */
+        /* 找到 #gameContainer 并修改为： */
         #gameContainer {
             position: relative;
-            /* 保持设计稿比例 */
+            
+            /* 核心比例保持 */
             aspect-ratio: 750 / 1334;
-            height: 100%; /* 跟随父容器高度 */
+            
+            /* 关键修改：自适应逻辑 */
+            height: 100%;             /* 尝试填满高度 */
+            width: auto;              /* 宽度自动计算 */
+            
+            /* 【重点】最大宽度限制 = 屏幕宽度 - 面板宽度(约300px) - 间隙缓冲 */
+            max-width: calc(100vw - 340px); 
+            
             border-radius: 16px;
             overflow: hidden;
             background: #FFF;
