@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>连线 Flow</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#faf7f2;
+  font-family:-apple-system,'PingFang SC','Hiragino Sans GB',sans-serif}
+#app{width:100%;height:100%;display:flex;flex-direction:column;
+  align-items:center;justify-content:space-between;padding:12px 12px env(safe-area-inset-bottom,12px)}
+.header{display:flex;justify-content:space-between;align-items:center;width:100%;max-width:480px;padding:8px 4px}
+.title{font-size:20px;font-weight:700;color:#6b6260;display:flex;align-items:center;gap:6px}
+.title .d{width:8px;height:8px;border-radius:50%;display:inline-block}
+.level-badge{background:#fff;border-radius:16px;padding:5px 14px;font-size:13px;color:#a09490;
+  font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,.05)}
+.info-bar{display:flex;justify-content:center;gap:20px;width:100%;max-width:480px}
+.info-item{font-size:12px;color:#b0a8a2;font-weight:500;display:flex;align-items:center;gap:3px}
+.info-item span{color:#7a706a;font-weight:700;min-width:24px;text-align:center}
+.canvas-wrap{border-radius:18px;background:#fff;box-shadow:0 3px 16px rgba(0,0,0,.06);
+  padding:6px;display:flex;align-items:center;justify-content:center}
+canvas{display:block;border-radius:13px;touch-action:none}
+.pips{display:flex;gap:5px;align-items:center;justify-content:center;flex-wrap:wrap}
+.pip{width:24px;height:24px;border-radius:50%;border:2.5px solid #ece7e2;transition:.3s;position:relative}
+.pip.done{border-color:currentColor;transform:scale(1.12)}
+.pip.done::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;font-size:11px;color:#fff;font-weight:700}
+.hint{font-size:12px;color:#c0b8b2;text-align:center;min-height:18px;font-weight:500}
+.btns{display:flex;gap:8px}
+.btn{height:40px;padding:0 20px;border-radius:20px;border:none;font-size:13px;font-weight:600;
+  cursor:pointer;display:flex;align-items:center;gap:4px;transition:.15s;-webkit-tap-highlight-color:transparent}
+.btn:active{transform:scale(.95)}
+.b2{background:#fff;color:#9a8e88;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.b1{background:linear-gradient(135deg,#a8d8a8,#7cc07c);color:#fff;box-shadow:0 3px 10px rgba(124,192,124,.3)}
+.modal-bg{position:fixed;inset:0;background:rgba(250,247,242,.88);backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:100}
+.modal-bg.show{display:flex}
+.modal{background:#fff;border-radius:24px;padding:36px;text-align:center;
+  box-shadow:0 8px 36px rgba(0,0,0,.08);max-width:300px;width:88%}
+.modal .emo{font-size:44px;margin-bottom:10px}
+.modal h2{font-size:22px;color:#5a504a;margin-bottom:4px;font-weight:700}
+.modal p{font-size:13px;color:#a09490;margin-bottom:6px;line-height:1.6}
+.stars{font-size:26px;margin:10px 0;letter-spacing:3px}
+.s1{color:#f0c040}.s0{color:#e0dcd8}
+.modal .btn{margin:8px auto 0;width:180px;justify-content:center}
+.confetti-wrap{position:fixed;inset:0;pointer-events:none;z-index:99;overflow:hidden}
+.cf{position:absolute;border-radius:2px;animation:cfall 1.8s ease-out forwards}
+@keyframes cfall{0%{transform:translateY(0) rotate(0) scale(1);opacity:1}
+  100%{transform:translateY(500px) rotate(720deg) scale(0);opacity:0}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="header">
+    <div class="title">
+      <span class="d" style="background:#ef8686"></span>
+      <span class="d" style="background:#7cc67c"></span>
+      <span class="d" style="background:#6ca6e0"></span>
+      连线
+    </div>
+    <div class="level-badge" id="lvlBadge">1 / 20</div>
+  </div>
+  <div class="info-bar">
+    <div class="info-item">步数 <span id="moves">0</span></div>
+    <div class="info-item">覆盖 <span id="cover">0/25</span></div>
+  </div>
+  <div class="canvas-wrap"><canvas id="cv"></canvas></div>
+  <div class="pips" id="pips"></div>
+  <div class="hint" id="hint">连接同色端点，填满所有格子 🌸</div>
+  <div class="btns">
+    <button class="btn b2" id="bReset">↻ 重来</button>
+    <button class="btn b2" id="bUndo">↩ 撤销</button>
+    <button class="btn b1" id="bNext">下一关 →</button>
+  </div>
+</div>
+<div class="modal-bg" id="winM">
+  <div class="modal">
+    <div class="emo">🎉</div>
+    <h2>太棒了！</h2>
+    <div class="stars" id="winStars"></div>
+    <p id="winMsg"></p>
+    <button class="btn b1" id="bWinNext">下一关 →</button>
+  </div>
+</div>
+<div class="confetti-wrap" id="confWrap"></div>
+<script>
+const cv=document.getElementById('cv'),cx=cv.getContext('2d');
+const COL={red:'#ef8686',green:'#7cc67c',blue:'#6ca6e0',orange:'#efb06c',purple:'#b088d0',
+  pink:'#e89ec0',yellow:'#dcc84a',cyan:'#5abcbc'};
+const COLD={red:'#c85858',green:'#4e8e4e',blue:'#4878aa',orange:'#b88040',purple:'#7e58a0',
+  pink:'#b07090',yellow:'#a89828',cyan:'#3a9090'};
+const CNAMES=Object.keys(COL);
+
+// ====== PUZZLE GENERATOR (solution-first) ======
+function genHamiltonianPath(n){
+  // snake pattern
+  const p=[];
+  for(let y=0;y<n;y++){
+    if(y%2===0) for(let x=0;x<n;x++) p.push({x,y});
+    else for(let x=n-1;x>=0;x--) p.push({x,y});
+  }
+  // random segment reversals to shuffle
+  for(let it=0;it<n*n*8;it++){
+    const i=Math.floor(Math.random()*(p.length-1));
+    const len=2+Math.floor(Math.random()*Math.min(5,p.length-i-1));
+    const j=Math.min(i+len,p.length-1);
+    if(j<=i) continue;
+    const seg=[...p.slice(i+1,j+1)].reverse();
+    // check adjacency preserved
+    let ok=true;
+    if(Math.abs(p[i].x-seg[0].x)+Math.abs(p[i].y-seg[0].y)!==1){ok=false}
+    if(j+1<p.length && Math.abs(seg[seg.length-1].x-p[j+1].x)+Math.abs(seg[seg.length-1].y-p[j+1].y)!==1){ok=false}
+    for(let k=0;ok&&k<seg.length-1;k++){
+      if(Math.abs(seg[k].x-seg[k+1].x)+Math.abs(seg[k].y-seg[k+1].y)!==1) ok=false;
+    }
+    if(ok) for(let k=0;k<seg.length;k++) p[i+1+k]=seg[k];
+  }
+  return p;
+}
+
+function genPuzzle(n,nc){
+  for(let att=0;att<50;att++){
+    const path=genHamiltonianPath(n);
+    if(path.length!==n*n) continue;
+    const total=n*n;
+    if(total<nc*2) continue;
+    // split into nc segments, each >=2 cells
+    const cuts=[0];
+    let ok=true;
+    for(let i=0;i<nc-1;i++){
+      const lo=cuts[cuts.length-1]+2;
+      const hi=total-2*(nc-1-i);
+      if(lo>hi){ok=false;break}
+      cuts.push(lo+Math.floor(Math.random()*(hi-lo+1)));
+    }
+    if(!ok) continue;
+    cuts.push(total);
+    const pairs=[];
+    for(let i=0;i<nc;i++){
+      const seg=path.slice(cuts[i],cuts[i+1]);
+      pairs.push({color:CNAMES[i],points:[[seg[0].x,seg[0].y],[seg[seg.length-1].x,seg[seg.length-1].y]]});
+    }
+    return {grid:n,pairs};
+  }
+  return null;
+}
+
+// ====== LEVELS ======
+let levels=[],curLvl=0;
+function initLevels(){
+  levels=[];
+  const cfgs=[[5,3],[5,3],[5,4],[5,4],[6,3],[6,4],[6,4],[6,5],[6,5],[7,4],
+              [7,5],[7,5],[7,6],[7,6],[8,5],[8,6],[8,6],[8,7],[9,7],[9,8]];
+  for(const [n,c] of cfgs){
+    const p=genPuzzle(n,c);
+    if(p) levels.push(p);
+  }
+  if(levels.length===0){
+    // emergency fallback
+    levels.push(genPuzzle(5,2)||{grid:5,pairs:[{color:'red',points:[[0,0],[4,4]]},{color:'blue',points:[[4,0],[0,4]]}]});
+  }
+}
+
+// ====== GAME STATE ======
+let gridN=5,cellSz=60,pad=12;
+let pairs=[],paths={},activeColor=null,drawing=false,won=false,moveN=0;
+let undoStack=[];
+
+function calcSizes(){
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const maxDim=Math.min(vw-40,vh*0.48,480);
+  cellSz=Math.floor((maxDim-pad*2)/gridN);
+  cellSz=Math.max(32,Math.min(cellSz,72));
+  pad=Math.max(8,Math.floor(cellSz*0.2));
+}
+
+function resizeCV(){
+  calcSizes();
+  const s=gridN*cellSz+pad*2;
+  const dpr=window.devicePixelRatio||1;
+  cv.width=s*dpr; cv.height=s*dpr;
+  cv.style.width=s+'px'; cv.style.height=s+'px';
+  cx.setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+
+function loadLvl(idx){
+  if(idx>=levels.length){
+    const n=Math.min(5+Math.floor(idx/3),9);
+    const c=Math.min(3+Math.floor(idx/2),8);
+    const p=genPuzzle(n,c);
+    if(p) levels.push(p); else {idx=0;curLvl=0;}
+  }
+  curLvl=idx;
+  const lv=levels[idx];
+  gridN=lv.grid;
+  pairs=lv.pairs.map(p=>({color:p.color,points:p.points.map(q=>({x:q[0],y:q[1]}))}));
+  paths={};
+  pairs.forEach(p=>paths[p.color]=[]);
+  activeColor=null; drawing=false; won=false; moveN=0; undoStack=[];
+  document.getElementById('lvlBadge').textContent=`${idx+1} / ${levels.length}`;
+  document.getElementById('winM').classList.remove('show');
+  buildPips(); resizeCV(); updateUI();
+}
+
+function buildPips(){
+  const el=document.getElementById('pips'); el.innerHTML='';
+  pairs.forEach(p=>{
+    const d=document.createElement('div');
+    d.className='pip'; d.id='pip_'+p.color;
+    d.style.background=COL[p.color]; d.style.color=COLD[p.color];
+    el.appendChild(d);
+  });
+}
+
+// ====== HELPERS ======
+function cc(gx,gy){return{x:pad+gx*cellSz+cellSz/2,y:pad+gy*cellSz+cellSz/2}}
+function sp(a,b){return a.x===b.x&&a.y===b.y}
+function adj(a,b){return Math.abs(a.x-b.x)+Math.abs(a.y-b.y)===1}
+function epColor(gx,gy){for(const p of pairs) for(const pt of p.points) if(pt.x===gx&&pt.y===gy) return p.color; return null}
+function pathDone(c){
+  const p=paths[c],pr=pairs.find(q=>q.color===c);
+  if(!p||p.length<2||!pr) return false;
+  const s=p[0],e=p[p.length-1],a=pr.points[0],b=pr.points[1];
+  return(sp(s,a)&&sp(e,b))||(sp(s,b)&&sp(e,a));
+}
+function coveredCount(){
+  const s=new Set();
+  for(const c in paths) for(const pt of paths[c]) s.add(pt.x+','+pt.y);
+  return s.size;
+}
+
+// ====== DRAW ======
+function draw(){
+  const w=gridN*cellSz+pad*2;
+  cx.clearRect(0,0,w,w);
+  // bg
+  cx.fillStyle='#faf7f2';
+  cx.beginPath(); cx.roundRect(0,0,w,w,13); cx.fill();
+  // grid bg
+  cx.fillStyle='#f4f0ea';
+  cx.beginPath(); cx.roundRect(pad-4,pad-4,gridN*cellSz+8,gridN*cellSz+8,8); cx.fill();
+
+  const dotR=Math.max(4,cellSz*0.08);
+  const bigR=Math.max(10,cellSz*0.28);
+  const lineW=Math.max(6,cellSz*0.22);
+
+  // grid dots
+  for(let gx=0;gx<gridN;gx++) for(let gy=0;gy<gridN;gy++){
+    if(epColor(gx,gy)) continue;
+    const c=cc(gx,gy);
+    cx.fillStyle='#d8d2cc'; cx.beginPath(); cx.arc(c.x,c.y,dotR,0,Math.PI*2); cx.fill();
+  }
+
+  // paths
+  for(const color in paths){
+    const p=paths[color]; if(p.length<2) continue;
+    const done=pathDone(color);
+    // shadow
+    cx.strokeStyle='rgba(0,0,0,.06)'; cx.lineWidth=lineW+4; cx.lineCap='round'; cx.lineJoin='round';
+    cx.beginPath();
+    let c0=cc(p[0].x,p[0].y); cx.moveTo(c0.x+2,c0.y+2);
+    for(let i=1;i<p.length;i++){const c=cc(p[i].x,p[i].y);cx.lineTo(c.x+2,c.y+2)}
+    cx.stroke();
+    // main
+    cx.globalAlpha=done?.75:.5;
+    cx.strokeStyle=COL[color]; cx.lineWidth=lineW; cx.beginPath();
+    c0=cc(p[0].x,p[0].y); cx.moveTo(c0.x,c0.y);
+    for(let i=1;i<p.length;i++){const c=cc(p[i].x,p[i].y);cx.lineTo(c.x,c.y)}
+    cx.stroke(); cx.globalAlpha=1;
+  }
+
+  // endpoints
+  for(const pr of pairs){
+    const done=pathDone(pr.color);
+    for(const pt of pr.points){
+      const c=cc(pt.x,pt.y);
+      // ring shadow
+      cx.fillStyle='rgba(0,0,0,.08)'; cx.beginPath(); cx.arc(c.x+2,c.y+2,bigR+4,0,Math.PI*2); cx.fill();
+      // outer ring
+      cx.fillStyle='#888'; cx.beginPath(); cx.arc(c.x,c.y,bigR+4,0,Math.PI*2); cx.fill();
+      cx.fillStyle='#666'; cx.beginPath(); cx.arc(c.x,c.y,bigR+1.5,0,Math.PI*2); cx.fill();
+      // color fill
+      cx.fillStyle=COL[pr.color]; cx.beginPath(); cx.arc(c.x,c.y,bigR-1,0,Math.PI*2); cx.fill();
+      // highlight
+      const g=cx.createRadialGradient(c.x-bigR*.25,c.y-bigR*.25,1,c.x,c.y,bigR);
+      g.addColorStop(0,'rgba(255,255,255,.45)'); g.addColorStop(1,'rgba(255,255,255,0)');
+      cx.fillStyle=g; cx.beginPath(); cx.arc(c.x,c.y,bigR-1,0,Math.PI*2); cx.fill();
+      // glow if done
+      if(done){
+        cx.save(); cx.shadowColor=COL[pr.color]; cx.shadowBlur=12;
+        cx.fillStyle='transparent'; cx.beginPath(); cx.arc(c.x,c.y,bigR+4,0,Math.PI*2); cx.fill();
+        cx.restore();
+      }
+    }
+  }
+}
+
+function updateUI(){
+  document.getElementById('moves').textContent=moveN;
+  const total=gridN*gridN, cov=coveredCount();
+  document.getElementById('cover').textContent=`${cov}/${total}`;
+  const hint=document.getElementById('hint');
+  let allDone=true;
+  for(const p of pairs){
+    const d=pathDone(p.color);
+    const pip=document.getElementById('pip_'+p.color);
+    if(pip){d?pip.classList.add('done'):pip.classList.remove('done')}
+    if(!d) allDone=false;
+  }
+  if(won) hint.textContent='✨ 完美通关！';
+  else if(allDone && cov<total) hint.textContent='还有空格子没有覆盖哦 🤔';
+  else if(allDone && cov===total) hint.textContent='✨ 完美！';
+  else hint.textContent='连接同色端点，填满所有格子 🌸';
+}
+
+// ====== WIN CHECK ======
+function checkWin(){
+  for(const p of pairs) if(!pathDone(p.color)) return false;
+  return coveredCount()===gridN*gridN;
+}
+
+function onWin(){
+  won=true;
+  updateUI();
+  // stars based on moves
+  const minMoves=gridN*gridN; // theoretical minimum
+  let stars=1;
+  if(moveN<=minMoves*1.5) stars=3;
+  else if(moveN<=minMoves*2.5) stars=2;
+  const starsEl=document.getElementById('winStars');
+  starsEl.innerHTML='';
+  for(let i=0;i<3;i++) starsEl.innerHTML+=`<span class="${i<stars?'s1':'s0'}">★</span>`;
+  document.getElementById('winMsg').textContent=`用了 ${moveN} 步完成！`;
+  showConfetti();
+  setTimeout(()=>document.getElementById('winM').classList.add('show'),600);
+}
+
+function showConfetti(){
+  const wrap=document.getElementById('confWrap'); wrap.innerHTML='';
+  const colors=['#ef8686','#7cc67c','#6ca6e0','#efb06c','#b088d0','#f0c040'];
+  for(let i=0;i<40;i++){
+    const d=document.createElement('div'); d.className='cf';
+    d.style.left=Math.random()*100+'%'; d.style.top='-10px';
+    d.style.width=(5+Math.random()*6)+'px'; d.style.height=(5+Math.random()*6)+'px';
+    d.style.background=colors[Math.floor(Math.random()*colors.length)];
+    d.style.animationDelay=Math.random()*0.6+'s';
+    d.style.animationDuration=(1.2+Math.random()*1)+'s';
+    wrap.appendChild(d);
+  }
+  setTimeout(()=>wrap.innerHTML='',3000);
+}
+
+// ====== INPUT ======
+function getGP(e){
+  const r=cv.getBoundingClientRect();
+  const sx=cv.width/(window.devicePixelRatio||1)/r.width;
+  const sy=cv.height/(window.devicePixelRatio||1)/r.height;
+  let px,py;
+  if(e.touches){px=(e.touches[0].clientX-r.left)*sx;py=(e.touches[0].clientY-r.top)*sy}
+  else{px=(e.clientX-r.left)*sx;py=(e.clientY-r.top)*sy}
+  const gx=Math.floor((px-pad)/cellSz), gy=Math.floor((py-pad)/cellSz);
+  if(gx<0||gx>=gridN||gy<0||gy>=gridN) return null;
+  // check distance to center
+  const c=cc(gx,gy);
+  if(Math.hypot(px-c.x,py-c.y)>cellSz*0.7) return null;
+  return{x:gx,y:gy};
+}
+
+function saveUndo(){
+  const snap={};
+  for(const c in paths) snap[c]=paths[c].map(p=>({...p}));
+  undoStack.push(snap);
+  if(undoStack.length>200) undoStack.shift();
+}
+
+function startDraw(e){
+  if(won) return; e.preventDefault();
+  const gp=getGP(e); if(!gp) return;
+
+  // Check if clicking on an endpoint
+  const ec=epColor(gp.x,gp.y);
+  if(ec){
+    saveUndo();
+    // Check if clicking on the END of an existing path (to extend from there, or start fresh)
+    const p=paths[ec];
+    if(p.length>0 && sp(p[p.length-1],gp)){
+      // Continue from end
+      activeColor=ec; drawing=true; draw(); return;
+    }
+    if(p.length>0 && sp(p[0],gp)){
+      // Reverse path and continue from other end... or just restart
+      paths[ec]=[{x:gp.x,y:gp.y}];
+      activeColor=ec; drawing=true; moveN++; draw(); updateUI(); return;
+    }
+    // Start new path from this endpoint
+    paths[ec]=[{x:gp.x,y:gp.y}];
+    activeColor=ec; drawing=true; moveN++; draw(); updateUI(); return;
+  }
+
+  // Check if clicking on existing path to truncate and continue
+  for(const color in paths){
+    const p=paths[color];
+    const idx=p.findIndex(pt=>pt.x===gp.x&&pt.y===gp.y);
+    if(idx>=0){
+      saveUndo();
+      // Truncate path at this point and continue
+      paths[color]=p.slice(0,idx+1);
+      activeColor=color; drawing=true; moveN++; draw(); updateUI(); return;
+    }
+  }
+}
+
+function moveDraw(e){
+  if(!drawing||!activeColor||won) return; e.preventDefault();
+  const gp=getGP(e); if(!gp) return;
+  const p=paths[activeColor]; if(!p.length) return;
+  const last=p[p.length-1];
+  if(sp(last,gp)) return;
+
+  // Going back? (undo last step in current path)
+  if(p.length>=2 && sp(p[p.length-2],gp)){
+    p.pop(); draw(); updateUI(); return;
+  }
+
+  if(!adj(last,gp)) return;
+
+  // Can't go to endpoint of another color
+  const ec=epColor(gp.x,gp.y);
+  if(ec && ec!==activeColor) return;
+
+  // If it's our own endpoint, only allow if it's the OTHER endpoint (completing the path)
+  if(ec===activeColor){
+    const eps=getOwnEndpoints(activeColor);
+    const startPt=p[0];
+    // The endpoint we're going to should be the one we DIDN'T start from
+    const isStart=eps.some(e=>sp(e,gp)&&sp(e,startPt));
+    if(isStart && p.length>1) return; // Going back to start, not allowed (use backtrack)
+    // It's the other endpoint - allow, this completes the path
+  }
+
+  // Can't revisit own path
+  if(p.some(pt=>sp(pt,gp))) return;
+
+  // If cell occupied by another path, truncate that path
+  for(const c2 in paths){
+    if(c2===activeColor) continue;
+    const idx=paths[c2].findIndex(pt=>pt.x===gp.x&&pt.y===gp.y);
+    if(idx>=0) paths[c2]=paths[c2].slice(0,idx);
+  }
+
+  p.push({x:gp.x,y:gp.y});
+
+  // If reached other endpoint, STOP drawing (fix issue #1)
+  if(pathDone(activeColor)){
+    drawing=false; activeColor=null;
+    moveN++;
+    draw(); updateUI();
+    if(checkWin()) onWin();
+    return;
+  }
+
+  draw(); updateUI();
+}
+
+function getOwnEndpoints(color){
+  const pr=pairs.find(p=>p.color===color);
+  return pr?pr.points:[];
+}
+
+function endDraw(e){
+  if(drawing) moveN++;
+  drawing=false; activeColor=null; updateUI();
+}
+
+cv.addEventListener('mousedown',startDraw);
+cv.addEventListener('mousemove',moveDraw);
+cv.addEventListener('mouseup',endDraw);
+cv.addEventListener('mouseleave',endDraw);
+cv.addEventListener('touchstart',startDraw,{passive:false});
+cv.addEventListener('touchmove',moveDraw,{passive:false});
+cv.addEventListener('touchend',endDraw);
+
+// Buttons
+document.getElementById('bReset').onclick=()=>loadLvl(curLvl);
+document.getElementById('bUndo').onclick=()=>{
+  if(won||!undoStack.length) return;
+  const snap=undoStack.pop();
+  for(const c in snap) paths[c]=snap[c];
+  moveN=Math.max(0,moveN-1);
+  draw(); updateUI();
+};
+document.getElementById('bNext').onclick=()=>loadLvl(curLvl+1);
+document.getElementById('bWinNext').onclick=()=>loadLvl(curLvl+1);
+
+window.addEventListener('resize',()=>{resizeCV()});
+
+// ====== INIT ======
+initLevels();
+loadLvl(0);
+</script>
+</body>
+</html>
