@@ -63,11 +63,11 @@ canvas{display:block;border-radius:13px;touch-action:none}
   </div>
   <div class="info-bar">
     <div class="info-item">步数 <span id="moves">0</span></div>
-    <div class="info-item">完成 <span id="cover">0/3</span></div>
+    <div class="info-item">覆盖 <span id="cover">0/25</span></div>
   </div>
   <div class="canvas-wrap"><canvas id="cv"></canvas></div>
   <div class="pips" id="pips"></div>
-  <div class="hint" id="hint">连接同色端点；带字母端点需经过所有同字母点，且不能经过其他字母点 🌸</div>
+  <div class="hint" id="hint">连接同色端点，填满所有格子 🌸</div>
   <div class="btns">
     <button class="btn b2" id="bReset">↻ 重来</button>
     <button class="btn b2" id="bUndo">↩ 撤销</button>
@@ -90,58 +90,81 @@ const COL={red:'#ef8686',green:'#7cc67c',blue:'#6ca6e0',orange:'#efb06c',purple:
   pink:'#e89ec0',yellow:'#dcc84a',cyan:'#5abcbc'};
 const COLD={red:'#c85858',green:'#4e8e4e',blue:'#4878aa',orange:'#b88040',purple:'#7e58a0',
   pink:'#b07090',yellow:'#a89828',cyan:'#3a9090'};
-// ====== 关卡设计部分 ======
-const levels=[
-  // 1
-  {
-    grid:5,
-    marks:[{x:2,y:3,label:'A'}],
-    pairs:[
-      {color:'red',points:[[1,1],[3,1]]},
-      {color:'blue',points:[{x:1,y:3,need:'A'},{x:3,y:3,need:'A'}]}
-    ]
-  },
-  // 2
-  {
-    grid:5,
-    marks:[{x:2,y:2,label:'A'}],
-    pairs:[
-      {color:'blue',points:[{x:2,y:0,need:'A'},{x:1,y:2,need:'A'}]},
-      {color:'red',points:[{x:3,y:2,need:'A'},{x:2,y:3,need:'A'}]}
-    ]
-  },
-  // 3
-  {
-    grid:5,
-    marks:[{x:1,y:2,label:'A'},{x:3,y:2,label:'A'}],
-    pairs:[
-      {color:'red',points:[{x:0,y:1,need:'A'},{x:4,y:3,need:'A'}]}
-    ]
-  },
-  // 4
-  {
-    grid:5,
-    marks:[{x:1,y:2,label:'A'},{x:3,y:2,label:'A'}],
-    pairs:[
-      {color:'blue',points:[{x:1,y:0,need:'A'},{x:3,y:0,need:'A'}]},
-      {color:'red',points:[{x:0,y:3,need:'A'},{x:4,y:3,need:'A'}]}
-    ]
-  },
-  // 5
-  {
-    grid:5,
-    marks:[{x:1,y:2,label:'A'},{x:2,y:2,label:'B'},{x:3,y:2,label:'A'}],
-    pairs:[
-      {color:'blue',points:[{x:0,y:1,need:'A'},{x:4,y:1,need:'A'}]},
-      {color:'red',points:[{x:2,y:0,need:'B'},{x:2,y:3,need:'B'}]}
-    ]
+const CNAMES=Object.keys(COL);
+
+// ====== PUZZLE GENERATOR (solution-first) ======
+function genHamiltonianPath(n){
+  // snake pattern
+  const p=[];
+  for(let y=0;y<n;y++){
+    if(y%2===0) for(let x=0;x<n;x++) p.push({x,y});
+    else for(let x=n-1;x>=0;x--) p.push({x,y});
   }
-];
-let curLvl=0;
+  // random segment reversals to shuffle
+  for(let it=0;it<n*n*8;it++){
+    const i=Math.floor(Math.random()*(p.length-1));
+    const len=2+Math.floor(Math.random()*Math.min(5,p.length-i-1));
+    const j=Math.min(i+len,p.length-1);
+    if(j<=i) continue;
+    const seg=[...p.slice(i+1,j+1)].reverse();
+    // check adjacency preserved
+    let ok=true;
+    if(Math.abs(p[i].x-seg[0].x)+Math.abs(p[i].y-seg[0].y)!==1){ok=false}
+    if(j+1<p.length && Math.abs(seg[seg.length-1].x-p[j+1].x)+Math.abs(seg[seg.length-1].y-p[j+1].y)!==1){ok=false}
+    for(let k=0;ok&&k<seg.length-1;k++){
+      if(Math.abs(seg[k].x-seg[k+1].x)+Math.abs(seg[k].y-seg[k+1].y)!==1) ok=false;
+    }
+    if(ok) for(let k=0;k<seg.length;k++) p[i+1+k]=seg[k];
+  }
+  return p;
+}
+
+function genPuzzle(n,nc){
+  for(let att=0;att<50;att++){
+    const path=genHamiltonianPath(n);
+    if(path.length!==n*n) continue;
+    const total=n*n;
+    if(total<nc*2) continue;
+    // split into nc segments, each >=2 cells
+    const cuts=[0];
+    let ok=true;
+    for(let i=0;i<nc-1;i++){
+      const lo=cuts[cuts.length-1]+2;
+      const hi=total-2*(nc-1-i);
+      if(lo>hi){ok=false;break}
+      cuts.push(lo+Math.floor(Math.random()*(hi-lo+1)));
+    }
+    if(!ok) continue;
+    cuts.push(total);
+    const pairs=[];
+    for(let i=0;i<nc;i++){
+      const seg=path.slice(cuts[i],cuts[i+1]);
+      pairs.push({color:CNAMES[i],points:[[seg[0].x,seg[0].y],[seg[seg.length-1].x,seg[seg.length-1].y]]});
+    }
+    return {grid:n,pairs};
+  }
+  return null;
+}
+
+// ====== LEVELS ======
+let levels=[],curLvl=0;
+function initLevels(){
+  levels=[];
+  const cfgs=[[5,3],[5,3],[5,4],[5,4],[6,3],[6,4],[6,4],[6,5],[6,5],[7,4],
+              [7,5],[7,5],[7,6],[7,6],[8,5],[8,6],[8,6],[8,7],[9,7],[9,8]];
+  for(const [n,c] of cfgs){
+    const p=genPuzzle(n,c);
+    if(p) levels.push(p);
+  }
+  if(levels.length===0){
+    // emergency fallback
+    levels.push(genPuzzle(5,2)||{grid:5,pairs:[{color:'red',points:[[0,0],[4,4]]},{color:'blue',points:[[4,0],[0,4]]}]});
+  }
+}
 
 // ====== GAME STATE ======
 let gridN=5,cellSz=60,pad=12;
-let pairs=[],marks=[],paths={},activeColor=null,drawing=false,won=false,moveN=0;
+let pairs=[],paths={},activeColor=null,drawing=false,won=false,moveN=0;
 let undoStack=[];
 
 function calcSizes(){
@@ -164,24 +187,15 @@ function resizeCV(){
 
 function loadLvl(idx){
   if(idx>=levels.length){
-    idx=0;
-  }else if(idx<0){
-    idx=levels.length-1;
+    const n=Math.min(5+Math.floor(idx/3),9);
+    const c=Math.min(3+Math.floor(idx/2),8);
+    const p=genPuzzle(n,c);
+    if(p) levels.push(p); else {idx=0;curLvl=0;}
   }
   curLvl=idx;
   const lv=levels[idx];
   gridN=lv.grid;
-  pairs=lv.pairs.map(p=>({
-    color:p.color,
-    points:p.points.map(q=>{
-      if(Array.isArray(q)) return {x:q[0],y:q[1],need:null};
-      return {x:q.x,y:q.y,need:q.need||q.tag||q.label||null};
-    })
-  }));
-  marks=(lv.marks||[]).map(m=>{
-    if(Array.isArray(m)) return {x:m[0],y:m[1],label:String(m[2]||'A')};
-    return {x:m.x,y:m.y,label:String(m.label||m.tag||'A')};
-  });
+  pairs=lv.pairs.map(p=>({color:p.color,points:p.points.map(q=>({x:q[0],y:q[1]}))}));
   paths={};
   pairs.forEach(p=>paths[p.color]=[]);
   activeColor=null; drawing=false; won=false; moveN=0; undoStack=[];
@@ -200,55 +214,24 @@ function buildPips(){
   });
 }
 
-// ====== 功能部分（规则与状态） ======
+// ====== HELPERS ======
 function cc(gx,gy){return{x:pad+gx*cellSz+cellSz/2,y:pad+gy*cellSz+cellSz/2}}
 function sp(a,b){return a.x===b.x&&a.y===b.y}
 function adj(a,b){return Math.abs(a.x-b.x)+Math.abs(a.y-b.y)===1}
 function epColor(gx,gy){for(const p of pairs) for(const pt of p.points) if(pt.x===gx&&pt.y===gy) return p.color; return null}
-function markAt(gx,gy){for(const m of marks) if(m.x===gx&&m.y===gy) return m; return null}
-function isMarkCell(gx,gy){return !!markAt(gx,gy)}
-function getRequiredLabels(color){
-  const pr=pairs.find(p=>p.color===color);
-  if(!pr) return [];
-  const s=new Set();
-  for(const pt of pr.points) if(pt.need) s.add(pt.need);
-  return [...s];
-}
-function canEnterMark(color,gx,gy){
-  const m=markAt(gx,gy);
-  if(!m) return true;
-  const req=new Set(getRequiredLabels(color));
-  if(req.size===0) return true;
-  return req.has(m.label);
-}
 function pathDone(c){
   const p=paths[c],pr=pairs.find(q=>q.color===c);
   if(!p||p.length<2||!pr) return false;
   const s=p[0],e=p[p.length-1],a=pr.points[0],b=pr.points[1];
   return(sp(s,a)&&sp(e,b))||(sp(s,b)&&sp(e,a));
 }
-function pathMeetsMarks(color){
-  const req=new Set(getRequiredLabels(color));
-  if(req.size===0) return true;
-  const p=paths[color]||[];
-  const hit=new Set(p.map(pt=>pt.x+','+pt.y));
-  for(const m of marks){
-    const isHit=hit.has(m.x+','+m.y);
-    if(req.has(m.label) && !isHit) return false;
-    if(!req.has(m.label) && isHit) return false;
-  }
-  return true;
-}
-function colorDone(color){
-  return pathDone(color)&&pathMeetsMarks(color);
-}
-function doneCount(){
-  let n=0;
-  for(const p of pairs) if(colorDone(p.color)) n++;
-  return n;
+function coveredCount(){
+  const s=new Set();
+  for(const c in paths) for(const pt of paths[c]) s.add(pt.x+','+pt.y);
+  return s.size;
 }
 
-// ====== 表现部分（绘制与UI） ======
+// ====== DRAW ======
 function draw(){
   const w=gridN*cellSz+pad*2;
   cx.clearRect(0,0,w,w);
@@ -265,27 +248,15 @@ function draw(){
 
   // grid dots
   for(let gx=0;gx<gridN;gx++) for(let gy=0;gy<gridN;gy++){
-    if(epColor(gx,gy)||isMarkCell(gx,gy)) continue;
+    if(epColor(gx,gy)) continue;
     const c=cc(gx,gy);
     cx.fillStyle='#d8d2cc'; cx.beginPath(); cx.arc(c.x,c.y,dotR,0,Math.PI*2); cx.fill();
-  }
-
-  // letter marks (A/B/...)
-  for(const m of marks){
-    const c=cc(m.x,m.y);
-    cx.fillStyle='rgba(0,0,0,.06)'; cx.beginPath(); cx.arc(c.x+1.5,c.y+1.5,bigR*.92,0,Math.PI*2); cx.fill();
-    cx.fillStyle='#f7f3ee'; cx.beginPath(); cx.arc(c.x,c.y,bigR*.92,0,Math.PI*2); cx.fill();
-    cx.strokeStyle='#c8c0b8'; cx.lineWidth=2; cx.beginPath(); cx.arc(c.x,c.y,bigR*.92,0,Math.PI*2); cx.stroke();
-    cx.fillStyle='#6f6660';
-    cx.font=`${Math.max(12,Math.floor(cellSz*0.42))}px sans-serif`;
-    cx.textAlign='center'; cx.textBaseline='middle';
-    cx.fillText(m.label,c.x,c.y+1);
   }
 
   // paths
   for(const color in paths){
     const p=paths[color]; if(p.length<2) continue;
-    const done=colorDone(color);
+    const done=pathDone(color);
     // shadow
     cx.strokeStyle='rgba(0,0,0,.06)'; cx.lineWidth=lineW+4; cx.lineCap='round'; cx.lineJoin='round';
     cx.beginPath();
@@ -302,7 +273,7 @@ function draw(){
 
   // endpoints
   for(const pr of pairs){
-    const done=colorDone(pr.color);
+    const done=pathDone(pr.color);
     for(const pt of pr.points){
       const c=cc(pt.x,pt.y);
       // ring shadow
@@ -312,12 +283,6 @@ function draw(){
       cx.fillStyle='#666'; cx.beginPath(); cx.arc(c.x,c.y,bigR+1.5,0,Math.PI*2); cx.fill();
       // color fill
       cx.fillStyle=COL[pr.color]; cx.beginPath(); cx.arc(c.x,c.y,bigR-1,0,Math.PI*2); cx.fill();
-      if(pt.need){
-        cx.fillStyle='rgba(255,255,255,.9)';
-        cx.font=`${Math.max(11,Math.floor(cellSz*0.4))}px sans-serif`;
-        cx.textAlign='center'; cx.textBaseline='middle';
-        cx.fillText(pt.need,c.x,c.y+1);
-      }
       // highlight
       const g=cx.createRadialGradient(c.x-bigR*.25,c.y-bigR*.25,1,c.x,c.y,bigR);
       g.addColorStop(0,'rgba(255,255,255,.45)'); g.addColorStop(1,'rgba(255,255,255,0)');
@@ -334,25 +299,26 @@ function draw(){
 
 function updateUI(){
   document.getElementById('moves').textContent=moveN;
-  const done=doneCount(),total=pairs.length;
-  document.getElementById('cover').textContent=`${done}/${total}`;
+  const total=gridN*gridN, cov=coveredCount();
+  document.getElementById('cover').textContent=`${cov}/${total}`;
   const hint=document.getElementById('hint');
   let allDone=true;
   for(const p of pairs){
-    const d=colorDone(p.color);
+    const d=pathDone(p.color);
     const pip=document.getElementById('pip_'+p.color);
     if(pip){d?pip.classList.add('done'):pip.classList.remove('done')}
     if(!d) allDone=false;
   }
   if(won) hint.textContent='✨ 完美通关！';
-  else if(allDone) hint.textContent='✨ 完美！';
-  else hint.textContent='连接同色端点；带字母端点需经过所有同字母点，且不能经过其他字母点 🌸';
+  else if(allDone && cov<total) hint.textContent='还有空格子没有覆盖哦 🤔';
+  else if(allDone && cov===total) hint.textContent='✨ 完美！';
+  else hint.textContent='连接同色端点，填满所有格子 🌸';
 }
 
 // ====== WIN CHECK ======
 function checkWin(){
-  for(const p of pairs) if(!colorDone(p.color)) return false;
-  return true;
+  for(const p of pairs) if(!pathDone(p.color)) return false;
+  return coveredCount()===gridN*gridN;
 }
 
 function onWin(){
@@ -476,19 +442,18 @@ function moveDraw(e){
 
   // Can't revisit own path
   if(p.some(pt=>sp(pt,gp))) return;
-  if(!canEnterMark(activeColor,gp.x,gp.y)) return;
 
-  // No crossing except on letter cells
+  // If cell occupied by another path, truncate that path
   for(const c2 in paths){
     if(c2===activeColor) continue;
     const idx=paths[c2].findIndex(pt=>pt.x===gp.x&&pt.y===gp.y);
-    if(idx>=0 && !isMarkCell(gp.x,gp.y)) return;
+    if(idx>=0) paths[c2]=paths[c2].slice(0,idx);
   }
 
   p.push({x:gp.x,y:gp.y});
 
   // If reached other endpoint, STOP drawing (fix issue #1)
-  if(colorDone(activeColor)){
+  if(pathDone(activeColor)){
     drawing=false; activeColor=null;
     moveN++;
     draw(); updateUI();
@@ -532,6 +497,7 @@ document.getElementById('bWinNext').onclick=()=>loadLvl(curLvl+1);
 window.addEventListener('resize',()=>{resizeCV()});
 
 // ====== INIT ======
+initLevels();
 loadLvl(0);
 </script>
 </body>
