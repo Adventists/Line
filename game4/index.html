@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>连线 Flow</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:auto;background:#faf7f2;
+  font-family:-apple-system,'PingFang SC','Hiragino Sans GB',sans-serif}
+#layout{width:100%;min-height:100%;display:flex;gap:12px;align-items:stretch;justify-content:center;
+  padding:12px 12px env(safe-area-inset-bottom,12px)}
+#app{flex:1;max-width:520px;display:flex;flex-direction:column;
+  align-items:center;justify-content:space-between;min-height:calc(100vh - 24px)}
+.header{display:flex;justify-content:space-between;align-items:center;width:100%;max-width:520px;padding:8px 4px}
+.title{font-size:20px;font-weight:700;color:#6b6260;display:flex;align-items:center;gap:6px}
+.title .d{width:8px;height:8px;border-radius:50%;display:inline-block}
+.level-badge{background:#fff;border-radius:16px;padding:5px 14px;font-size:13px;color:#a09490;
+  font-weight:600;box-shadow:0 2px 6px rgba(0,0,0,.05)}
+.info-bar{display:flex;justify-content:center;gap:20px;width:100%;max-width:520px}
+.info-item{font-size:12px;color:#b0a8a2;font-weight:500;display:flex;align-items:center;gap:3px}
+.info-item span{color:#7a706a;font-weight:700;min-width:24px;text-align:center}
+.canvas-wrap{border-radius:18px;background:#fff;box-shadow:0 3px 16px rgba(0,0,0,.06);
+  padding:6px;display:flex;align-items:center;justify-content:center}
+canvas{display:block;border-radius:13px;touch-action:none}
+.pips{display:flex;gap:5px;align-items:center;justify-content:center;flex-wrap:wrap}
+.pip{width:24px;height:24px;border-radius:50%;border:2.5px solid #ece7e2;transition:.3s;position:relative}
+.pip.done{border-color:currentColor;transform:scale(1.12)}
+.pip.done::after{content:'✓';position:absolute;inset:0;display:flex;align-items:center;
+  justify-content:center;font-size:11px;color:#fff;font-weight:700}
+.hint{font-size:12px;color:#c0b8b2;text-align:center;min-height:18px;font-weight:500}
+.btns{display:flex;gap:8px}
+.btn{height:40px;padding:0 20px;border-radius:20px;border:none;font-size:13px;font-weight:600;
+  cursor:pointer;display:flex;align-items:center;gap:4px;transition:.15s;-webkit-tap-highlight-color:transparent}
+.btn:active{transform:scale(.95)}
+.b2{background:#fff;color:#9a8e88;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.b1{background:linear-gradient(135deg,#a8d8a8,#7cc07c);color:#fff;box-shadow:0 3px 10px rgba(124,192,124,.3)}
+.editor{width:320px;background:#fff;border-radius:18px;box-shadow:0 3px 16px rgba(0,0,0,.06);padding:12px;
+  display:flex;flex-direction:column;gap:10px;align-self:flex-start}
+.editor h3{font-size:15px;color:#6b6260}
+.ed-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ed-row label{font-size:12px;color:#9e928c;font-weight:600}
+.ed-select,.ed-input{height:32px;border:1px solid #e8e2dd;border-radius:10px;padding:0 8px;background:#faf7f2;color:#6f6660}
+.ed-tools{display:flex;gap:6px;flex-wrap:wrap}
+.ed-chip{height:34px;padding:0 10px;border-radius:17px;border:1px dashed #d8d1ca;background:#fff;color:#7b7069;
+  display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;cursor:grab}
+.ed-chip.active{border-style:solid;background:#f3eee8}
+.ed-dir{display:flex;gap:6px;flex-wrap:wrap}
+.ed-dir button{width:34px;height:34px;border:none;border-radius:10px;background:#f4efe8;color:#8a7f77;font-weight:700;cursor:pointer}
+.ed-dir button.on{background:#7cc07c;color:#fff}
+.ed-msg{min-height:18px;font-size:12px;color:#ad7c64}
+.ed-msg.ok{color:#5c9a5c}
+.ed-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ed-actions .btn{height:34px;padding:0 12px;font-size:12px}
+.ed-switch{width:100%;justify-content:center}
+@media (max-width:900px){
+  #layout{flex-direction:column;align-items:center}
+  #app{width:100%;max-width:520px}
+  .editor{width:100%;max-width:520px;align-self:stretch}
+}
+.modal-bg{position:fixed;inset:0;background:rgba(250,247,242,.88);backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);display:none;align-items:center;justify-content:center;z-index:100}
+.modal-bg.show{display:flex}
+.modal{background:#fff;border-radius:24px;padding:36px;text-align:center;
+  box-shadow:0 8px 36px rgba(0,0,0,.08);max-width:300px;width:88%}
+.modal .emo{font-size:44px;margin-bottom:10px}
+.modal h2{font-size:22px;color:#5a504a;margin-bottom:4px;font-weight:700}
+.modal p{font-size:13px;color:#a09490;margin-bottom:6px;line-height:1.6}
+.stars{font-size:26px;margin:10px 0;letter-spacing:3px}
+.s1{color:#f0c040}.s0{color:#e0dcd8}
+.modal .btn{margin:8px auto 0;width:180px;justify-content:center}
+.confetti-wrap{position:fixed;inset:0;pointer-events:none;z-index:99;overflow:hidden}
+.cf{position:absolute;border-radius:2px;animation:cfall 1.8s ease-out forwards}
+@keyframes cfall{0%{transform:translateY(0) rotate(0) scale(1);opacity:1}
+  100%{transform:translateY(500px) rotate(720deg) scale(0);opacity:0}}
+</style>
+</head>
+<body>
+<div id="layout">
+<div id="app">
+  <div class="header">
+    <div class="title">
+      <span class="d" style="background:#ef8686"></span>
+      <span class="d" style="background:#7cc67c"></span>
+      <span class="d" style="background:#6ca6e0"></span>
+      连线
+    </div>
+    <div class="level-badge" id="lvlBadge">1 / 20</div>
+  </div>
+  <div class="info-bar">
+    <div class="info-item">步数 <span id="moves">0</span></div>
+    <div class="info-item">完成 <span id="cover">0/1</span></div>
+  </div>
+  <div class="canvas-wrap"><canvas id="cv"></canvas></div>
+  <div class="pips" id="pips"></div>
+  <div class="hint" id="hint">从任一端拖动，另一端会镜像前进并会合</div>
+  <div class="btns">
+    <button class="btn b2" id="bReset">↻ 重来</button>
+    <button class="btn b2" id="bUndo">↩ 撤销</button>
+    <button class="btn b1" id="bNext">下一关 →</button>
+  </div>
+</div>
+<aside class="editor" id="editor">
+  <h3>关卡编辑器</h3>
+  <div class="ed-actions">
+    <button class="btn b2 ed-switch" id="bEditMode">编辑模式：关</button>
+  </div>
+  <div class="ed-row">
+    <label for="edLvl">编辑关卡</label>
+    <select class="ed-select" id="edLvl"></select>
+  </div>
+  <div class="ed-tools" id="edTools">
+    <button class="ed-chip active" id="edDragBlock">拖拽障碍点</button>
+    <button class="ed-chip" id="edDragEndpoint">拖拽端点</button>
+  </div>
+  <div class="ed-row">
+    <label for="edColor">组颜色</label>
+    <select class="ed-select" id="edColor"></select>
+    <select class="ed-select" id="edSide">
+      <option value="a">端点 A</option>
+      <option value="b">端点 B</option>
+    </select>
+  </div>
+  <div class="ed-row">
+    <label>方向</label>
+    <div class="ed-dir">
+      <button id="edDirUp" data-dir="up">↑</button>
+      <button id="edDirRight" data-dir="right">→</button>
+      <button id="edDirDown" data-dir="down">↓</button>
+      <button id="edDirLeft" data-dir="left">←</button>
+    </div>
+  </div>
+  <div class="ed-actions">
+    <button class="btn b2" id="bEdClear">清空当前关</button>
+    <button class="btn b2" id="bEdRestore">恢复默认</button>
+    <button class="btn b1" id="bEdApply">应用并试玩</button>
+  </div>
+  <div class="ed-msg" id="edMsg">开启编辑模式后，可拖拽到棋盘落点</div>
+</aside>
+</div>
+<div class="modal-bg" id="winM">
+  <div class="modal">
+    <div class="emo">🎉</div>
+    <h2>太棒了！</h2>
+    <div class="stars" id="winStars"></div>
+    <p id="winMsg"></p>
+    <button class="btn b1" id="bWinNext">下一关 →</button>
+  </div>
+</div>
+<div class="confetti-wrap" id="confWrap"></div>
+<script>
+const cv=document.getElementById('cv'),cx=cv.getContext('2d');
+const COL={red:'#ef8686',green:'#7cc67c',blue:'#6ca6e0',orange:'#efb06c',purple:'#b088d0',
+  pink:'#e89ec0',yellow:'#dcc84a',cyan:'#5abcbc'};
+const COLD={red:'#c85858',green:'#4e8e4e',blue:'#4878aa',orange:'#b88040',purple:'#7e58a0',
+  pink:'#b07090',yellow:'#a89828',cyan:'#3a9090'};
+const DIR_ANGLE={up:0,right:Math.PI/2,down:Math.PI,left:-Math.PI/2};
+const DIR_BASIS={
+  up:{f:{x:0,y:-1},r:{x:1,y:0}},
+  right:{f:{x:1,y:0},r:{x:0,y:1}},
+  down:{f:{x:0,y:1},r:{x:-1,y:0}},
+  left:{f:{x:-1,y:0},r:{x:0,y:-1}}
+};
+const LEVELS=[
+  {
+    grid:5,
+    blocks:[],
+    groups:[
+      {color:'red',a:{x:0,y:2,dir:'right'},b:{x:4,y:2,dir:'left'}}
+    ]
+  },
+  {
+    grid:5,
+    blocks:[],
+    groups:[
+      {color:'red',a:{x:0,y:1,dir:'right'},b:{x:4,y:1,dir:'left'}},
+      {color:'blue',a:{x:0,y:3,dir:'right'},b:{x:4,y:3,dir:'left'}}
+    ]
+  },
+  {
+    grid:5,
+    blocks:[[2,2]],
+    groups:[
+      {color:'red',a:{x:0,y:1,dir:'right'},b:{x:4,y:1,dir:'left'}},
+      {color:'blue',a:{x:0,y:3,dir:'right'},b:{x:4,y:3,dir:'left'}}
+    ]
+  }
+];
+const DIRS=['up','right','down','left'];
+const E={
+  modeBtn:document.getElementById('bEditMode'),
+  lvl:document.getElementById('edLvl'),
+  color:document.getElementById('edColor'),
+  side:document.getElementById('edSide'),
+  msg:document.getElementById('edMsg'),
+  dragBlock:document.getElementById('edDragBlock'),
+  dragEndpoint:document.getElementById('edDragEndpoint'),
+  dirBtns:[...document.querySelectorAll('.ed-dir button')],
+  clearBtn:document.getElementById('bEdClear'),
+  restoreBtn:document.getElementById('bEdRestore'),
+  applyBtn:document.getElementById('bEdApply')
+};
+
+// ====== GAME STATE ======
+let levels=[],curLvl=0;
+let gridN=5,cellSz=60,pad=12;
+let groups=[],paths={},blocksSet=new Set();
+let activeColor=null,activeSide='a',drawing=false,won=false,moveN=0;
+let undoStack=[];
+let editorMode=false;
+let editorSelectedLevel=0;
+let editorDrafts=[];
+let editorTool='block';
+let editorColor='red';
+let editorSide='a';
+let editorDir='up';
+let editorDragPayload=null;
+let editorHoverCell=null;
+let editorSelectedEndpoint=null;
+let editorEndpointDragCtx=null;
+
+function initLevels(){
+  levels=LEVELS.map(lv=>({
+    grid:lv.grid,
+    blocks:lv.blocks.map(p=>[p[0],p[1]]),
+    groups:lv.groups.map(g=>({
+      color:g.color,
+      a:{x:g.a.x,y:g.a.y,dir:g.a.dir},
+      b:{x:g.b.x,y:g.b.y,dir:g.b.dir}
+    }))
+  }));
+}
+function cloneLevelDef(lv){
+  return{
+    grid:lv.grid,
+    blocks:lv.blocks.map(p=>[p[0],p[1]]),
+    groups:lv.groups.map(g=>({
+      color:g.color,
+      a:{x:g.a.x,y:g.a.y,dir:g.a.dir},
+      b:{x:g.b.x,y:g.b.y,dir:g.b.dir}
+    }))
+  };
+}
+function getDraft(levelIdx){
+  if(!editorDrafts[levelIdx]) editorDrafts[levelIdx]=cloneLevelDef(LEVELS[levelIdx]||LEVELS[0]);
+  return editorDrafts[levelIdx];
+}
+function refreshEditorSelects(){
+  E.lvl.innerHTML='';
+  LEVELS.forEach((_,i)=>{
+    const op=document.createElement('option');
+    op.value=String(i);
+    op.textContent=`第 ${i+1} 关`;
+    E.lvl.appendChild(op);
+  });
+  E.lvl.value=String(editorSelectedLevel);
+  const draft=getDraft(editorSelectedLevel);
+  E.color.innerHTML='';
+  draft.groups.forEach(g=>{
+    const op=document.createElement('option');
+    op.value=g.color;
+    op.textContent=g.color;
+    E.color.appendChild(op);
+  });
+  if(!draft.groups.some(g=>g.color===editorColor)) editorColor=draft.groups[0]?.color||'red';
+  E.color.value=editorColor;
+}
+function setEditorMsg(msg,ok=false){
+  E.msg.textContent=msg;
+  E.msg.classList.toggle('ok',ok);
+}
+function getDraftGroup(levelIdx,color){
+  return getDraft(levelIdx).groups.find(g=>g.color===color)||null;
+}
+function validateDraft(levelIdx){
+  const draft=getDraft(levelIdx);
+  const inDraft=(x,y)=>x>=0&&x<draft.grid&&y>=0&&y<draft.grid;
+  const used=new Map();
+  for(const b of draft.blocks){
+    if(!inDraft(b[0],b[1])) return{ok:false,msg:'障碍点越界'};
+    const k=toKey(b[0],b[1]);
+    if(used.has(k)) return{ok:false,msg:'存在重叠的障碍点'};
+    used.set(k,'block');
+  }
+  for(const g of draft.groups){
+    if(!DIRS.includes(g.a.dir)||!DIRS.includes(g.b.dir)) return{ok:false,msg:`${g.color} 方向非法`};
+    const pa=[g.a.x,g.a.y],pb=[g.b.x,g.b.y];
+    if(!inDraft(pa[0],pa[1])||!inDraft(pb[0],pb[1])) return{ok:false,msg:`${g.color} 端点越界`};
+    if(pa[0]===pb[0]&&pa[1]===pb[1]) return{ok:false,msg:`${g.color} 的 A/B 端点不能重合`};
+    for(const [x,y,side] of [[pa[0],pa[1],'A'],[pb[0],pb[1],'B']]){
+      const k=toKey(x,y);
+      if(used.has(k)) return{ok:false,msg:`${g.color}-${side} 与其他元素重叠`};
+      used.set(k,`${g.color}-${side}`);
+    }
+  }
+  return{ok:true,msg:'校验通过，可以应用'};
+}
+function initEditor(){
+  editorDrafts=LEVELS.map(cloneLevelDef);
+  editorSelectedLevel=0;
+  editorColor=editorDrafts[0].groups[0]?.color||'red';
+  editorSide='a';
+  editorDir='up';
+  refreshEditorSelects();
+  renderEditorState();
+}
+function renderEditorState(){
+  E.modeBtn.textContent=`编辑模式：${editorMode?'开':'关'}`;
+  E.dragBlock.classList.toggle('active',editorTool==='block');
+  E.dragEndpoint.classList.toggle('active',editorTool==='endpoint');
+  E.lvl.value=String(editorSelectedLevel);
+  E.side.value=editorSide;
+  E.color.value=editorColor;
+  E.dirBtns.forEach(btn=>btn.classList.toggle('on',btn.dataset.dir===editorDir));
+}
+function draftEndpointAt(levelIdx,x,y){
+  const draft=getDraft(levelIdx);
+  for(const g of draft.groups){
+    if(g.a.x===x&&g.a.y===y) return{color:g.color,side:'a'};
+    if(g.b.x===x&&g.b.y===y) return{color:g.color,side:'b'};
+  }
+  return null;
+}
+function draftHasBlock(levelIdx,x,y){
+  return getDraft(levelIdx).blocks.some(b=>b[0]===x&&b[1]===y);
+}
+function setDraftEndpoint(levelIdx,color,side,x,y,dir){
+  const g=getDraftGroup(levelIdx,color);
+  if(!g) return{ok:false,msg:'找不到该颜色组'};
+  const draft=getDraft(levelIdx);
+  if(x<0||x>=draft.grid||y<0||y>=draft.grid) return{ok:false,msg:'端点越界'};
+  const other=side==='a'?g.b:g.a;
+  if(other.x===x&&other.y===y) return{ok:false,msg:'同组 A/B 端点不能重合'};
+  if(draftHasBlock(levelIdx,x,y)) return{ok:false,msg:'端点不能放在障碍点上'};
+  const hit=draftEndpointAt(levelIdx,x,y);
+  if(hit && !(hit.color===color && hit.side===side)) return{ok:false,msg:'端点不能与其他端点重叠'};
+  g[side]={x,y,dir};
+  return{ok:true,msg:'端点已放置'};
+}
+function toggleDraftBlock(levelIdx,x,y){
+  const draft=getDraft(levelIdx);
+  if(x<0||x>=draft.grid||y<0||y>=draft.grid) return{ok:false,msg:'障碍点越界'};
+  const ep=draftEndpointAt(levelIdx,x,y);
+  if(ep) return{ok:false,msg:'障碍点不能与端点重叠'};
+  const idx=draft.blocks.findIndex(b=>b[0]===x&&b[1]===y);
+  if(idx>=0){ draft.blocks.splice(idx,1); return{ok:true,msg:'已移除障碍点'}; }
+  draft.blocks.push([x,y]);
+  return{ok:true,msg:'已放置障碍点'};
+}
+function applyEditorPayload(cell,payload){
+  if(!payload||!cell) return;
+  let ret={ok:false,msg:'无效放置'};
+  if(payload.type==='block'){
+    ret=toggleDraftBlock(editorSelectedLevel,cell.x,cell.y);
+  }else if(payload.type==='endpoint'){
+    ret=setDraftEndpoint(editorSelectedLevel,payload.color,payload.side,cell.x,cell.y,payload.dir);
+    if(ret.ok){
+      editorSelectedEndpoint={level:editorSelectedLevel,color:payload.color,side:payload.side};
+      editorColor=payload.color;
+      editorSide=payload.side;
+      editorDir=payload.dir;
+    }
+  }
+  setEditorMsg(ret.msg,ret.ok);
+  draw();
+  renderEditorState();
+}
+function clearDraft(levelIdx){
+  const draft=getDraft(levelIdx);
+  draft.blocks=[];
+  draft.groups.forEach((g,i)=>{
+    const y=Math.min(draft.grid-1,i*2);
+    g.a={x:0,y,dir:'right'};
+    g.b={x:Math.max(0,draft.grid-1),y,dir:'left'};
+  });
+}
+function restoreDraft(levelIdx){
+  editorDrafts[levelIdx]=cloneLevelDef(LEVELS[levelIdx]||LEVELS[0]);
+}
+
+function calcSizes(){
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const maxDim=Math.min(vw-40,vh*0.48,480);
+  cellSz=Math.floor((maxDim-pad*2)/gridN);
+  cellSz=Math.max(32,Math.min(cellSz,72));
+  pad=Math.max(8,Math.floor(cellSz*0.2));
+}
+
+function resizeCV(){
+  calcSizes();
+  const s=gridN*cellSz+pad*2;
+  const dpr=window.devicePixelRatio||1;
+  cv.width=s*dpr; cv.height=s*dpr;
+  cv.style.width=s+'px'; cv.style.height=s+'px';
+  cx.setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+
+function loadLvl(idx){
+  if(levels.length===0) return;
+  if(idx<0) idx=0;
+  curLvl=idx%levels.length;
+  const lv=levels[curLvl];
+  gridN=lv.grid;
+  blocksSet=new Set(lv.blocks.map(p=>p[0]+','+p[1]));
+  groups=lv.groups.map(g=>({
+    color:g.color,
+    a:{x:g.a.x,y:g.a.y,dir:g.a.dir},
+    b:{x:g.b.x,y:g.b.y,dir:g.b.dir}
+  }));
+  paths={};
+  groups.forEach(g=>{
+    paths[g.color]={
+      a:[{x:g.a.x,y:g.a.y}],
+      b:[{x:g.b.x,y:g.b.y}],
+      done:false
+    };
+  });
+  activeColor=null; activeSide='a'; drawing=false; won=false; moveN=0; undoStack=[];
+  document.getElementById('lvlBadge').textContent=`${curLvl+1} / ${levels.length}`;
+  document.getElementById('winM').classList.remove('show');
+  buildPips(); resizeCV(); updateUI();
+}
+
+function buildPips(){
+  const el=document.getElementById('pips'); el.innerHTML='';
+  groups.forEach(g=>{
+    const d=document.createElement('div');
+    d.className='pip'; d.id='pip_'+g.color;
+    d.style.background=COL[g.color]; d.style.color=COLD[g.color];
+    el.appendChild(d);
+  });
+}
+
+// ====== HELPERS ======
+function cc(gx,gy){return{x:pad+gx*cellSz+cellSz/2,y:pad+gy*cellSz+cellSz/2}}
+function sp(a,b){return a.x===b.x&&a.y===b.y}
+function adj(a,b){return Math.abs(a.x-b.x)+Math.abs(a.y-b.y)===1}
+function toKey(x,y){return x+','+y}
+function inGrid(x,y){return x>=0&&x<gridN&&y>=0&&y<gridN}
+function isBlocked(x,y){return blocksSet.has(toKey(x,y))}
+function groupByColor(color){return groups.find(g=>g.color===color)||null}
+function endpointAt(x,y){
+  for(const g of groups){
+    if(g.a.x===x&&g.a.y===y) return {color:g.color,side:'a'};
+    if(g.b.x===x&&g.b.y===y) return {color:g.color,side:'b'};
+  }
+  return null;
+}
+function pathDone(color){
+  return Boolean(paths[color] && paths[color].done);
+}
+function doneCount(){
+  return groups.filter(g=>pathDone(g.color)).length;
+}
+function clonePaths(src){
+  const out={};
+  for(const c in src){
+    out[c]={
+      a:src[c].a.map(p=>({x:p.x,y:p.y})),
+      b:src[c].b.map(p=>({x:p.x,y:p.y})),
+      done:src[c].done
+    };
+  }
+  return out;
+}
+function saveUndo(){
+  undoStack.push({paths:clonePaths(paths),moveN});
+  if(undoStack.length>200) undoStack.shift();
+}
+function resetGroupPath(color){
+  const g=groupByColor(color);
+  if(!g) return;
+  paths[color]={
+    a:[{x:g.a.x,y:g.a.y}],
+    b:[{x:g.b.x,y:g.b.y}],
+    done:false
+  };
+}
+function hasPoint(arr,x,y){return arr.some(p=>p.x===x&&p.y===y)}
+function endpointOccupiedByOther(color,x,y){
+  const ep=endpointAt(x,y);
+  return Boolean(ep && ep.color!==color);
+}
+function localMirrorDelta(ctrlDir,peerDir,dx,dy){
+  const b0=DIR_BASIS[ctrlDir], b1=DIR_BASIS[peerDir];
+  const f=dx*b0.f.x+dy*b0.f.y;
+  const r=dx*b0.r.x+dy*b0.r.y;
+  return {
+    x:f*b1.f.x+r*b1.r.x,
+    y:f*b1.f.y+r*b1.r.y
+  };
+}
+function hitOtherPath(color,x,y){
+  for(const c in paths){
+    if(c===color) continue;
+    const st=paths[c];
+    if(hasPoint(st.a,x,y)||hasPoint(st.b,x,y)) return c;
+  }
+  return null;
+}
+function drawOrientedEndpoint(pt,dir,color,done){
+  const c=cc(pt.x,pt.y);
+  const r=Math.max(10,cellSz*0.28);
+  const ang=DIR_ANGLE[dir]||0;
+  cx.save();
+  cx.translate(c.x,c.y);
+  cx.rotate(ang);
+  cx.fillStyle='rgba(0,0,0,.08)';
+  cx.beginPath();
+  cx.moveTo(-r*0.76+2,-r*0.65+2);
+  cx.lineTo(r*0.76+2,-r*0.65+2);
+  cx.lineTo(r*0.76+2,r*0.3+2);
+  cx.lineTo(2,r*0.95+2);
+  cx.lineTo(-r*0.76+2,r*0.3+2);
+  cx.closePath();
+  cx.fill();
+  cx.fillStyle='#6f6762';
+  cx.beginPath();
+  cx.moveTo(-r*0.76,-r*0.65);
+  cx.lineTo(r*0.76,-r*0.65);
+  cx.lineTo(r*0.76,r*0.3);
+  cx.lineTo(0,r*0.95);
+  cx.lineTo(-r*0.76,r*0.3);
+  cx.closePath();
+  cx.fill();
+  cx.fillStyle=COL[color];
+  cx.beginPath();
+  cx.moveTo(-r*0.62,-r*0.53);
+  cx.lineTo(r*0.62,-r*0.53);
+  cx.lineTo(r*0.62,r*0.2);
+  cx.lineTo(0,r*0.78);
+  cx.lineTo(-r*0.62,r*0.2);
+  cx.closePath();
+  cx.fill();
+  if(done){
+    cx.save();
+    cx.shadowColor=COL[color];
+    cx.shadowBlur=12;
+    cx.strokeStyle='rgba(255,255,255,.3)';
+    cx.lineWidth=2;
+    cx.stroke();
+    cx.restore();
+  }
+  cx.restore();
+}
+function getGPFromClient(clientX,clientY){
+  const r=cv.getBoundingClientRect();
+  const sx=cv.width/(window.devicePixelRatio||1)/r.width;
+  const sy=cv.height/(window.devicePixelRatio||1)/r.height;
+  const px=(clientX-r.left)*sx,py=(clientY-r.top)*sy;
+  const gx=Math.floor((px-pad)/cellSz), gy=Math.floor((py-pad)/cellSz);
+  if(gx<0||gx>=gridN||gy<0||gy>=gridN) return null;
+  const c=cc(gx,gy);
+  if(Math.hypot(px-c.x,py-c.y)>cellSz*0.7) return null;
+  return{x:gx,y:gy};
+}
+
+// ====== DRAW ======
+function draw(){
+  const w=gridN*cellSz+pad*2;
+  cx.clearRect(0,0,w,w);
+  // bg
+  cx.fillStyle='#faf7f2';
+  cx.beginPath(); cx.roundRect(0,0,w,w,13); cx.fill();
+  // grid bg
+  cx.fillStyle='#f4f0ea';
+  cx.beginPath(); cx.roundRect(pad-4,pad-4,gridN*cellSz+8,gridN*cellSz+8,8); cx.fill();
+
+  const dotR=Math.max(4,cellSz*0.08);
+  const lineW=Math.max(6,cellSz*0.22);
+
+  // grid dots
+  for(let gx=0;gx<gridN;gx++) for(let gy=0;gy<gridN;gy++){
+    if(endpointAt(gx,gy) || isBlocked(gx,gy)) continue;
+    const c=cc(gx,gy);
+    cx.fillStyle='#d8d2cc'; cx.beginPath(); cx.arc(c.x,c.y,dotR,0,Math.PI*2); cx.fill();
+  }
+
+  // blocked points
+  for(const k of blocksSet){
+    const [x,y]=k.split(',').map(Number);
+    const c=cc(x,y),s=Math.max(8,cellSz*0.28);
+    cx.fillStyle='#8c837d';
+    cx.beginPath();
+    cx.roundRect(c.x-s/2,c.y-s/2,s,s,4);
+    cx.fill();
+    cx.strokeStyle='#f1ece7';
+    cx.lineWidth=2;
+    cx.beginPath();
+    cx.moveTo(c.x-s*0.25,c.y-s*0.25);
+    cx.lineTo(c.x+s*0.25,c.y+s*0.25);
+    cx.moveTo(c.x+s*0.25,c.y-s*0.25);
+    cx.lineTo(c.x-s*0.25,c.y+s*0.25);
+    cx.stroke();
+  }
+
+  // paths
+  for(const g of groups){
+    const st=paths[g.color];
+    for(const side of ['a','b']){
+      const p=st[side];
+      if(!p || p.length<2) continue;
+      const done=st.done;
+      cx.strokeStyle='rgba(0,0,0,.06)';
+      cx.lineWidth=lineW+4;
+      cx.lineCap='round';
+      cx.lineJoin='round';
+      cx.beginPath();
+      let c0=cc(p[0].x,p[0].y); cx.moveTo(c0.x+2,c0.y+2);
+      for(let i=1;i<p.length;i++){const c=cc(p[i].x,p[i].y);cx.lineTo(c.x+2,c.y+2)}
+      cx.stroke();
+      cx.globalAlpha=done?0.8:0.56;
+      cx.strokeStyle=COL[g.color];
+      cx.lineWidth=lineW;
+      cx.beginPath();
+      c0=cc(p[0].x,p[0].y); cx.moveTo(c0.x,c0.y);
+      for(let i=1;i<p.length;i++){const c=cc(p[i].x,p[i].y);cx.lineTo(c.x,c.y)}
+      cx.stroke();
+      cx.globalAlpha=1;
+    }
+    if(!st.done){
+      const ha=st.a[st.a.length-1], hb=st.b[st.b.length-1];
+      for(const h of [ha,hb]){
+        const c=cc(h.x,h.y);
+        cx.fillStyle='rgba(255,255,255,.9)';
+        cx.beginPath(); cx.arc(c.x,c.y,Math.max(3,cellSz*0.08),0,Math.PI*2); cx.fill();
+      }
+    }
+  }
+
+  // endpoints
+  for(const g of groups){
+    const done=pathDone(g.color);
+    drawOrientedEndpoint(g.a,g.a.dir,g.color,done);
+    drawOrientedEndpoint(g.b,g.b.dir,g.color,done);
+  }
+  if(editorMode){
+    const draft=getDraft(editorSelectedLevel);
+    cx.save();
+    cx.globalAlpha=0.35;
+    for(const b of draft.blocks){
+      const c=cc(b[0],b[1]),s=Math.max(8,cellSz*0.28);
+      cx.fillStyle='#8c837d';
+      cx.beginPath();
+      cx.roundRect(c.x-s/2,c.y-s/2,s,s,4);
+      cx.fill();
+    }
+    for(const g of draft.groups){
+      drawOrientedEndpoint(g.a,g.a.dir,g.color,false);
+      drawOrientedEndpoint(g.b,g.b.dir,g.color,false);
+    }
+    cx.restore();
+    if(editorSelectedEndpoint && editorSelectedEndpoint.level===editorSelectedLevel){
+      const sg=draft.groups.find(g=>g.color===editorSelectedEndpoint.color);
+      if(sg){
+        const pt=sg[editorSelectedEndpoint.side],c=cc(pt.x,pt.y);
+        cx.strokeStyle='#f0b050';
+        cx.lineWidth=3;
+        cx.beginPath();
+        cx.arc(c.x,c.y,Math.max(12,cellSz*0.34),0,Math.PI*2);
+        cx.stroke();
+      }
+    }
+    if(editorHoverCell){
+      const c=cc(editorHoverCell.x,editorHoverCell.y);
+      cx.strokeStyle='rgba(240,176,80,.9)';
+      cx.lineWidth=2;
+      cx.beginPath();
+      cx.roundRect(c.x-cellSz*0.38,c.y-cellSz*0.38,cellSz*0.76,cellSz*0.76,8);
+      cx.stroke();
+      const payload=editorDragPayload||{
+        type:editorTool,
+        color:editorColor,
+        side:editorSide,
+        dir:editorDir
+      };
+      cx.save();
+      cx.globalAlpha=0.45;
+      if(payload.type==='block'){
+        const s=Math.max(8,cellSz*0.28);
+        cx.fillStyle='#8c837d';
+        cx.beginPath();
+        cx.roundRect(c.x-s/2,c.y-s/2,s,s,4);
+        cx.fill();
+      }else{
+        drawOrientedEndpoint({x:editorHoverCell.x,y:editorHoverCell.y},payload.dir,payload.color,false);
+      }
+      cx.restore();
+    }
+  }
+}
+
+function updateUI(){
+  document.getElementById('moves').textContent=moveN;
+  const done=doneCount(), total=groups.length;
+  document.getElementById('cover').textContent=`${done}/${total}`;
+  const hint=document.getElementById('hint');
+  if(editorMode){
+    hint.textContent='编辑模式中：拖拽障碍/端点到网格，完成后点“应用并试玩”';
+    return;
+  }
+  let allDone=true;
+  for(const g of groups){
+    const d=pathDone(g.color);
+    const pip=document.getElementById('pip_'+g.color);
+    if(pip){d?pip.classList.add('done'):pip.classList.remove('done')}
+    if(!d) allDone=false;
+  }
+  if(won) hint.textContent='✨ 完美通关！';
+  else if(allDone) hint.textContent='所有组都已会合，太棒了！';
+  else hint.textContent='从任一端拖动，另一端会镜像前进并会合';
+}
+
+// ====== WIN CHECK ======
+function checkWin(){
+  for(const g of groups) if(!pathDone(g.color)) return false;
+  return true;
+}
+
+function onWin(){
+  won=true;
+  updateUI();
+  // stars based on moves
+  const minMoves=Math.max(1,groups.length*2);
+  let stars=1;
+  if(moveN<=minMoves*1.5) stars=3;
+  else if(moveN<=minMoves*2.5) stars=2;
+  const starsEl=document.getElementById('winStars');
+  starsEl.innerHTML='';
+  for(let i=0;i<3;i++) starsEl.innerHTML+=`<span class="${i<stars?'s1':'s0'}">★</span>`;
+  document.getElementById('winMsg').textContent=`用了 ${moveN} 步完成！`;
+  showConfetti();
+  setTimeout(()=>document.getElementById('winM').classList.add('show'),600);
+}
+
+function showConfetti(){
+  const wrap=document.getElementById('confWrap'); wrap.innerHTML='';
+  const colors=['#ef8686','#7cc67c','#6ca6e0','#efb06c','#b088d0','#f0c040'];
+  for(let i=0;i<40;i++){
+    const d=document.createElement('div'); d.className='cf';
+    d.style.left=Math.random()*100+'%'; d.style.top='-10px';
+    d.style.width=(5+Math.random()*6)+'px'; d.style.height=(5+Math.random()*6)+'px';
+    d.style.background=colors[Math.floor(Math.random()*colors.length)];
+    d.style.animationDelay=Math.random()*0.6+'s';
+    d.style.animationDuration=(1.2+Math.random()*1)+'s';
+    wrap.appendChild(d);
+  }
+  setTimeout(()=>wrap.innerHTML='',3000);
+}
+
+// ====== INPUT ======
+function getGP(e){
+  if(e.touches && e.touches.length) return getGPFromClient(e.touches[0].clientX,e.touches[0].clientY);
+  if(e.changedTouches && e.changedTouches.length) return getGPFromClient(e.changedTouches[0].clientX,e.changedTouches[0].clientY);
+  if(typeof e.clientX==='number'&&typeof e.clientY==='number') return getGPFromClient(e.clientX,e.clientY);
+  return null;
+}
+function currentEditorPayload(){
+  return{
+    type:editorTool,
+    color:editorColor,
+    side:editorSide,
+    dir:editorDir
+  };
+}
+function nextDir(dir){
+  const i=DIRS.indexOf(dir);
+  return DIRS[(i+1+DIRS.length)%DIRS.length]||'up';
+}
+function updateEditorHoverByEvent(e){
+  editorHoverCell=getGP(e);
+  if(editorEndpointDragCtx && editorHoverCell){
+    if(editorHoverCell.x!==editorEndpointDragCtx.start.x || editorHoverCell.y!==editorEndpointDragCtx.start.y){
+      editorEndpointDragCtx.moved=true;
+    }
+  }
+  draw();
+}
+function beginEditorDrag(payload,e,source='panel'){
+  if(!editorMode) return;
+  editorDragPayload={...payload,source};
+  if(source!=='canvas-endpoint') editorEndpointDragCtx=null;
+  updateEditorHoverByEvent(e);
+}
+function editorPlaceFromEvent(e){
+  if(!editorMode) return;
+  const cell=getGP(e)||editorHoverCell;
+  if(editorEndpointDragCtx && editorDragPayload && editorDragPayload.type==='endpoint'){
+    const ctx=editorEndpointDragCtx;
+    const g=getDraftGroup(editorSelectedLevel,ctx.color);
+    if(g){
+      const pt=g[ctx.side];
+      const sameCell=cell && cell.x===ctx.start.x && cell.y===ctx.start.y;
+      if(!ctx.moved || sameCell){
+        const nd=nextDir(pt.dir);
+        const ret=setDraftEndpoint(editorSelectedLevel,ctx.color,ctx.side,pt.x,pt.y,nd);
+        if(ret.ok){
+          editorSelectedEndpoint={level:editorSelectedLevel,color:ctx.color,side:ctx.side};
+          editorColor=ctx.color;
+          editorSide=ctx.side;
+          editorDir=nd;
+          setEditorMsg(`已旋转 ${ctx.color}-${ctx.side.toUpperCase()} 到 ${nd}`,true);
+          renderEditorState();
+        }else{
+          setEditorMsg(ret.msg,false);
+        }
+      }else if(cell){
+        applyEditorPayload(cell,editorDragPayload);
+      }
+    }
+  }else if(cell){
+    applyEditorPayload(cell,editorDragPayload||currentEditorPayload());
+  }
+  editorDragPayload=null;
+  editorEndpointDragCtx=null;
+  editorHoverCell=null;
+  draw();
+}
+function handleEditorCanvasTap(cell){
+  if(!cell) return;
+  const ep=draftEndpointAt(editorSelectedLevel,cell.x,cell.y);
+  if(ep){
+    editorSelectedEndpoint={level:editorSelectedLevel,color:ep.color,side:ep.side};
+    editorColor=ep.color;
+    editorSide=ep.side;
+    const g=getDraftGroup(editorSelectedLevel,ep.color);
+    if(g) editorDir=g[ep.side].dir;
+    setEditorMsg(`已选中 ${ep.color}-${ep.side.toUpperCase()}，可调整方向`,true);
+    renderEditorState();
+    draw();
+    return;
+  }
+  applyEditorPayload(cell,currentEditorPayload());
+}
+
+function startDraw(e){
+  if(editorMode){
+    if(e) e.preventDefault();
+    const cell=getGP(e);
+    editorHoverCell=cell;
+    if(cell){
+      const ep=draftEndpointAt(editorSelectedLevel,cell.x,cell.y);
+      if(ep){
+        const g=getDraftGroup(editorSelectedLevel,ep.color);
+        const dir=g?g[ep.side].dir:'up';
+        editorSelectedEndpoint={level:editorSelectedLevel,color:ep.color,side:ep.side};
+        editorColor=ep.color;
+        editorSide=ep.side;
+        editorDir=dir;
+        editorEndpointDragCtx={color:ep.color,side:ep.side,start:{x:cell.x,y:cell.y},moved:false};
+        beginEditorDrag({type:'endpoint',color:ep.color,side:ep.side,dir},e,'canvas-endpoint');
+        setEditorMsg('拖动端点可移动，轻点可旋转方向',true);
+        renderEditorState();
+        draw();
+        return;
+      }
+    }
+    editorEndpointDragCtx=null;
+    draw();
+    return;
+  }
+  if(won) return; e.preventDefault();
+  const gp=getGP(e); if(!gp) return;
+
+  const ep=endpointAt(gp.x,gp.y);
+  if(!ep) return;
+
+  saveUndo();
+  const st=paths[ep.color];
+  if(st.done) resetGroupPath(ep.color);
+
+  const head=paths[ep.color][ep.side][paths[ep.color][ep.side].length-1];
+  if(!(head.x===gp.x && head.y===gp.y)) resetGroupPath(ep.color);
+
+  activeColor=ep.color;
+  activeSide=ep.side;
+  drawing=true;
+  moveN++;
+  draw();
+  updateUI();
+}
+
+function moveDraw(e){
+  if(editorMode){
+    if(e) e.preventDefault();
+    updateEditorHoverByEvent(e);
+    return;
+  }
+  if(!drawing||!activeColor||won) return; e.preventDefault();
+  const gp=getGP(e); if(!gp) return;
+  const st=paths[activeColor];
+  if(!st || st.done) return;
+  const peerSide=activeSide==='a'?'b':'a';
+  const ctrlPath=st[activeSide],peerPath=st[peerSide];
+  const lastCtrl=ctrlPath[ctrlPath.length-1];
+  const lastPeer=peerPath[peerPath.length-1];
+  if(sp(lastCtrl,gp)) return;
+  if(!adj(lastCtrl,gp)) return;
+
+  if(ctrlPath.length>=2 && sp(ctrlPath[ctrlPath.length-2],gp)){
+    ctrlPath.pop();
+    if(peerPath.length>=2) peerPath.pop();
+    draw();
+    updateUI();
+    return;
+  }
+
+  const g=groupByColor(activeColor);
+  if(!g) return;
+  const ctrlDir=activeSide==='a'?g.a.dir:g.b.dir;
+  const peerDir=activeSide==='a'?g.b.dir:g.a.dir;
+  const dx=gp.x-lastCtrl.x,dy=gp.y-lastCtrl.y;
+  const md=localMirrorDelta(ctrlDir,peerDir,dx,dy);
+  const nextPeer={x:lastPeer.x+md.x,y:lastPeer.y+md.y};
+  if(!inGrid(gp.x,gp.y) || !inGrid(nextPeer.x,nextPeer.y)) return;
+  if(isBlocked(gp.x,gp.y) || isBlocked(nextPeer.x,nextPeer.y)) return;
+  if(endpointOccupiedByOther(activeColor,gp.x,gp.y) || endpointOccupiedByOther(activeColor,nextPeer.x,nextPeer.y)) return;
+  if(hasPoint(ctrlPath,gp.x,gp.y) || hasPoint(peerPath,nextPeer.x,nextPeer.y)) return;
+  if(hasPoint(ctrlPath,nextPeer.x,nextPeer.y) || hasPoint(peerPath,gp.x,gp.y)) return;
+  if(gp.x===lastPeer.x && gp.y===lastPeer.y && nextPeer.x===lastCtrl.x && nextPeer.y===lastCtrl.y) return;
+
+  const hit1=hitOtherPath(activeColor,gp.x,gp.y);
+  if(hit1) resetGroupPath(hit1);
+  const hit2=hitOtherPath(activeColor,nextPeer.x,nextPeer.y);
+  if(hit2) resetGroupPath(hit2);
+
+  ctrlPath.push({x:gp.x,y:gp.y});
+  peerPath.push(nextPeer);
+  if(gp.x===nextPeer.x && gp.y===nextPeer.y){
+    st.done=true;
+    drawing=false;
+    activeColor=null;
+    if(checkWin()) onWin();
+  }
+  draw();
+  updateUI();
+}
+
+function endDraw(e){
+  if(editorMode){
+    if(e) e.preventDefault();
+    const cell=getGP(e);
+    if(editorDragPayload) editorPlaceFromEvent(e);
+    else handleEditorCanvasTap(cell);
+    return;
+  }
+  if(e && e.preventDefault) e.preventDefault();
+  drawing=false;
+  activeColor=null;
+  updateUI();
+}
+function applyDraftToLevel(levelIdx){
+  const ck=validateDraft(levelIdx);
+  if(!ck.ok){setEditorMsg(ck.msg,false); return false;}
+  levels[levelIdx]=cloneLevelDef(getDraft(levelIdx));
+  setEditorMsg('已应用到试玩关卡',true);
+  return true;
+}
+function switchEditorLevel(levelIdx){
+  editorSelectedLevel=levelIdx;
+  refreshEditorSelects();
+  editorSelectedEndpoint=null;
+  const draft=getDraft(editorSelectedLevel);
+  editorColor=draft.groups[0]?.color||'red';
+  editorSide='a';
+  editorDir=draft.groups[0]?.a?.dir||'up';
+  renderEditorState();
+  loadLvl(editorSelectedLevel);
+}
+
+cv.addEventListener('mousedown',startDraw);
+cv.addEventListener('mousemove',moveDraw);
+cv.addEventListener('mouseup',endDraw);
+cv.addEventListener('mouseleave',endDraw);
+cv.addEventListener('touchstart',startDraw,{passive:false});
+cv.addEventListener('touchmove',moveDraw,{passive:false});
+cv.addEventListener('touchend',endDraw);
+window.addEventListener('mousemove',e=>{ if(editorDragPayload) updateEditorHoverByEvent(e); });
+window.addEventListener('mouseup',e=>{ if(editorDragPayload) editorPlaceFromEvent(e); });
+window.addEventListener('touchmove',e=>{ if(editorDragPayload){e.preventDefault();updateEditorHoverByEvent(e);} },{passive:false});
+window.addEventListener('touchend',e=>{ if(editorDragPayload){e.preventDefault();editorPlaceFromEvent(e);} },{passive:false});
+
+// Buttons
+document.getElementById('bReset').onclick=()=>loadLvl(curLvl);
+document.getElementById('bUndo').onclick=()=>{
+  if(won||!undoStack.length) return;
+  const snap=undoStack.pop();
+  paths=clonePaths(snap.paths);
+  moveN=snap.moveN;
+  won=false;
+  draw(); updateUI();
+};
+document.getElementById('bNext').onclick=()=>{
+  loadLvl((curLvl+1)%levels.length);
+  editorSelectedLevel=curLvl;
+  refreshEditorSelects();
+  renderEditorState();
+};
+document.getElementById('bWinNext').onclick=()=>{
+  loadLvl((curLvl+1)%levels.length);
+  editorSelectedLevel=curLvl;
+  refreshEditorSelects();
+  renderEditorState();
+};
+
+// Editor controls
+E.modeBtn.onclick=()=>{
+  editorMode=!editorMode;
+  drawing=false;
+  activeColor=null;
+  editorHoverCell=null;
+  if(editorMode && curLvl!==editorSelectedLevel) loadLvl(editorSelectedLevel);
+  renderEditorState();
+  updateUI();
+  draw();
+};
+E.lvl.onchange=()=>{
+  const idx=Number(E.lvl.value)||0;
+  switchEditorLevel(idx);
+};
+E.color.onchange=()=>{
+  editorColor=E.color.value;
+  const g=getDraftGroup(editorSelectedLevel,editorColor);
+  if(g){ editorDir=g[editorSide].dir; }
+  renderEditorState();
+  draw();
+};
+E.side.onchange=()=>{
+  editorSide=E.side.value;
+  const g=getDraftGroup(editorSelectedLevel,editorColor);
+  if(g){ editorDir=g[editorSide].dir; }
+  renderEditorState();
+  draw();
+};
+E.dirBtns.forEach(btn=>{
+  btn.onclick=()=>{
+    editorDir=btn.dataset.dir;
+    if(editorSelectedEndpoint && editorSelectedEndpoint.level===editorSelectedLevel){
+      const g=getDraftGroup(editorSelectedLevel,editorSelectedEndpoint.color);
+      if(g){
+        g[editorSelectedEndpoint.side].dir=editorDir;
+        setEditorMsg(`已更新 ${editorSelectedEndpoint.color}-${editorSelectedEndpoint.side.toUpperCase()} 方向`,true);
+      }
+    }
+    renderEditorState();
+    draw();
+  };
+});
+E.dragBlock.onmousedown=e=>{
+  editorTool='block';
+  renderEditorState();
+  beginEditorDrag({type:'block'},e);
+};
+E.dragBlock.ontouchstart=e=>{
+  editorTool='block';
+  renderEditorState();
+  beginEditorDrag({type:'block'},e);
+};
+E.dragEndpoint.onmousedown=e=>{
+  editorTool='endpoint';
+  renderEditorState();
+  beginEditorDrag({type:'endpoint',color:editorColor,side:editorSide,dir:editorDir},e);
+};
+E.dragEndpoint.ontouchstart=e=>{
+  editorTool='endpoint';
+  renderEditorState();
+  beginEditorDrag({type:'endpoint',color:editorColor,side:editorSide,dir:editorDir},e);
+};
+E.clearBtn.onclick=()=>{
+  clearDraft(editorSelectedLevel);
+  editorSelectedEndpoint=null;
+  setEditorMsg('已清空当前关草稿，请重新摆放端点/障碍',true);
+  draw();
+};
+E.restoreBtn.onclick=()=>{
+  restoreDraft(editorSelectedLevel);
+  refreshEditorSelects();
+  editorSelectedEndpoint=null;
+  setEditorMsg('已恢复到默认配置',true);
+  draw();
+};
+E.applyBtn.onclick=()=>{
+  if(!applyDraftToLevel(editorSelectedLevel)) return;
+  loadLvl(editorSelectedLevel);
+  editorMode=false;
+  renderEditorState();
+  updateUI();
+};
+
+window.addEventListener('resize',()=>{resizeCV()});
+
+// ====== INIT ======
+initLevels();
+initEditor();
+loadLvl(0);
+</script>
+</body>
+</html>
