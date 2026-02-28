@@ -92,7 +92,7 @@ canvas{display:block;border-radius:13px;touch-action:none}
     <div class="level-badge" id="lvlBadge">1 / 5</div>
   </div>
   <div class="info-bar">
-    <div class="info-item">步数 <span id="moves">0</span></div>
+    <div class="info-item">最大长度 <span id="moves">0</span></div>
     <div class="info-item">完成 <span id="cover">0/1</span></div>
   </div>
   <div class="canvas-wrap"><canvas id="cv"></canvas></div>
@@ -234,7 +234,7 @@ const E={
 let levels=[],curLvl=0;
 let gridN=5,cellSz=60,pad=12;
 let groups=[],paths={},blocksSet=new Set();
-let activeColor=null,activeSide='a',drawing=false,won=false,moveN=0;
+let activeColor=null,activeSide='a',drawing=false,won=false,maxLen=0;
 let undoStack=[];
 let editorMode=false;
 let editorSelectedLevel=0;
@@ -538,7 +538,7 @@ function loadLvl(idx){
       done:false
     };
   });
-  activeColor=null; activeSide='a'; drawing=false; won=false; moveN=0; undoStack=[];
+  activeColor=null; activeSide='a'; drawing=false; won=false; maxLen=0; undoStack=[];
   document.getElementById('lvlBadge').textContent=`${curLvl+1} / ${levels.length}`;
   document.getElementById('winM').classList.remove('show');
   buildPips(); resizeCV(); updateUI();
@@ -587,8 +587,17 @@ function clonePaths(src){
   return out;
 }
 function saveUndo(){
-  undoStack.push({paths:clonePaths(paths),moveN});
+  undoStack.push({paths:clonePaths(paths)});
   if(undoStack.length>200) undoStack.shift();
+}
+function currentTotalLength(){
+  let len=0;
+  for(const color in paths){
+    const st=paths[color];
+    len+=Math.max(0,st.a.length-1);
+    len+=Math.max(0,st.b.length-1);
+  }
+  return len;
 }
 function resetGroupPath(color){
   const g=groupByColor(color);
@@ -814,7 +823,8 @@ function draw(){
 }
 
 function updateUI(){
-  document.getElementById('moves').textContent=moveN;
+  maxLen=Math.max(maxLen,currentTotalLength());
+  document.getElementById('moves').textContent=maxLen;
   const done=doneCount(), total=groups.length;
   document.getElementById('cover').textContent=`${done}/${total}`;
   const hint=document.getElementById('hint');
@@ -843,15 +853,15 @@ function checkWin(){
 function onWin(){
   won=true;
   updateUI();
-  // stars based on moves
-  const minMoves=Math.max(1,groups.length*2);
+  // stars based on achieved max length (longer is better)
+  const minLen=Math.max(1,groups.length*2);
   let stars=1;
-  if(moveN<=minMoves*1.5) stars=3;
-  else if(moveN<=minMoves*2.5) stars=2;
+  if(maxLen>=minLen*4) stars=3;
+  else if(maxLen>=minLen*2) stars=2;
   const starsEl=document.getElementById('winStars');
   starsEl.innerHTML='';
   for(let i=0;i<3;i++) starsEl.innerHTML+=`<span class="${i<stars?'s1':'s0'}">★</span>`;
-  document.getElementById('winMsg').textContent=`用了 ${moveN} 步完成！`;
+  document.getElementById('winMsg').textContent=`本关最大长度 ${maxLen}`;
   showConfetti();
   setTimeout(()=>document.getElementById('winM').classList.add('show'),600);
 }
@@ -998,7 +1008,6 @@ function startDraw(e){
   activeColor=ep.color;
   activeSide=ep.side;
   drawing=true;
-  moveN++;
   draw();
   updateUI();
 }
@@ -1119,7 +1128,6 @@ document.getElementById('bUndo').onclick=()=>{
   if(won||!undoStack.length) return;
   const snap=undoStack.pop();
   paths=clonePaths(snap.paths);
-  moveN=snap.moveN;
   won=false;
   draw(); updateUI();
 };
