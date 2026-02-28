@@ -53,6 +53,10 @@ canvas{display:block;border-radius:13px;touch-action:none}
 .ed-actions{display:flex;gap:8px;flex-wrap:wrap}
 .ed-actions .btn{height:34px;padding:0 12px;font-size:12px}
 .ed-switch{width:100%;justify-content:center}
+.toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(14px);opacity:0;
+  background:rgba(70,63,58,.92);color:#fff;padding:8px 14px;border-radius:14px;font-size:12px;
+  font-weight:600;pointer-events:none;transition:.2s;z-index:120}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 @media (max-width:900px){
   #layout{flex-direction:column;align-items:center}
   #app{width:100%;max-width:520px}
@@ -85,7 +89,7 @@ canvas{display:block;border-radius:13px;touch-action:none}
       <span class="d" style="background:#6ca6e0"></span>
       连线
     </div>
-    <div class="level-badge" id="lvlBadge">1 / 20</div>
+    <div class="level-badge" id="lvlBadge">1 / 5</div>
   </div>
   <div class="info-bar">
     <div class="info-item">步数 <span id="moves">0</span></div>
@@ -135,6 +139,10 @@ canvas{display:block;border-radius:13px;touch-action:none}
     <button class="btn b2" id="bEdRestore">恢复默认</button>
     <button class="btn b1" id="bEdApply">应用并试玩</button>
   </div>
+  <div class="ed-actions">
+    <button class="btn b2" id="bEdSave">保存到本地</button>
+    <button class="btn b2" id="bEdCopy">复制关卡JSON</button>
+  </div>
   <div class="ed-msg" id="edMsg">开启编辑模式后，可拖拽到棋盘落点</div>
 </aside>
 </div>
@@ -148,6 +156,7 @@ canvas{display:block;border-radius:13px;touch-action:none}
   </div>
 </div>
 <div class="confetti-wrap" id="confWrap"></div>
+<div class="toast" id="blockToast">线被挡住了。</div>
 <script>
 const cv=document.getElementById('cv'),cx=cv.getContext('2d');
 const COL={red:'#ef8686',green:'#7cc67c',blue:'#6ca6e0',orange:'#efb06c',purple:'#b088d0',
@@ -166,7 +175,7 @@ const LEVELS=[
     grid:5,
     blocks:[],
     groups:[
-      {color:'red',a:{x:0,y:2,dir:'right'},b:{x:4,y:2,dir:'left'}}
+      {color:'red',a:{x:1,y:0,dir:'up'},b:{x:3,y:5,dir:'down'}}
     ]
   },
   {
@@ -174,7 +183,6 @@ const LEVELS=[
     blocks:[],
     groups:[
       {color:'red',a:{x:0,y:1,dir:'right'},b:{x:4,y:1,dir:'left'}},
-      {color:'blue',a:{x:0,y:3,dir:'right'},b:{x:4,y:3,dir:'left'}}
     ]
   },
   {
@@ -182,11 +190,27 @@ const LEVELS=[
     blocks:[[2,2]],
     groups:[
       {color:'red',a:{x:0,y:1,dir:'right'},b:{x:4,y:1,dir:'left'}},
-      {color:'blue',a:{x:0,y:3,dir:'right'},b:{x:4,y:3,dir:'left'}}
+    ]
+  },
+  {
+    grid:5,
+    blocks:[[1,2],[3,2]],
+    groups:[
+      {color:'red',a:{x:0,y:1,dir:'right'},b:{x:4,y:1,dir:'left'}},
+    ]
+  },
+  {
+    grid:6,
+    blocks:[[2,2],[3,3]],
+    groups:[
+      {color:'red',a:{x:0,y:1,dir:'right'},b:{x:5,y:1,dir:'left'}},
+      {color:'blue',a:{x:0,y:4,dir:'right'},b:{x:5,y:4,dir:'left'}},
     ]
   }
 ];
 const DIRS=['up','right','down','left'];
+const FIXED_LEVEL_COUNT=5;
+const STORAGE_KEY='line_game4_levels_v1';
 const E={
   modeBtn:document.getElementById('bEditMode'),
   lvl:document.getElementById('edLvl'),
@@ -198,7 +222,10 @@ const E={
   dirBtns:[...document.querySelectorAll('.ed-dir button')],
   clearBtn:document.getElementById('bEdClear'),
   restoreBtn:document.getElementById('bEdRestore'),
-  applyBtn:document.getElementById('bEdApply')
+  applyBtn:document.getElementById('bEdApply'),
+  saveBtn:document.getElementById('bEdSave'),
+  copyBtn:document.getElementById('bEdCopy'),
+  blockToast:document.getElementById('blockToast')
 };
 
 // ====== GAME STATE ======
@@ -218,6 +245,8 @@ let editorDragPayload=null;
 let editorHoverCell=null;
 let editorSelectedEndpoint=null;
 let editorEndpointDragCtx=null;
+let lastBlockedHintAt=0;
+let blockedHintTimer=null;
 
 function initLevels(){
   levels=LEVELS.map(lv=>({
@@ -240,6 +269,57 @@ function cloneLevelDef(lv){
       b:{x:g.b.x,y:g.b.y,dir:g.b.dir}
     }))
   };
+}
+function isValidLevelDef(lv){
+  if(!lv || typeof lv!=='object') return false;
+  if(typeof lv.grid!=='number' || lv.grid<3 || lv.grid>9) return false;
+  if(!Array.isArray(lv.blocks) || !Array.isArray(lv.groups) || lv.groups.length===0) return false;
+  for(const b of lv.blocks){
+    if(!Array.isArray(b) || b.length!==2) return false;
+    if(!Number.isInteger(b[0]) || !Number.isInteger(b[1])) return false;
+  }
+  for(const g of lv.groups){
+    if(!g || typeof g.color!=='string' || !g.a || !g.b) return false;
+    for(const side of ['a','b']){
+      const p=g[side];
+      if(!Number.isInteger(p.x) || !Number.isInteger(p.y) || !DIRS.includes(p.dir)) return false;
+    }
+  }
+  return true;
+}
+function loadDraftsFromStorage(){
+  try{
+    const raw=localStorage.getItem(STORAGE_KEY);
+    if(!raw) return null;
+    const parsed=JSON.parse(raw);
+    if(!Array.isArray(parsed) || parsed.length!==FIXED_LEVEL_COUNT) return null;
+    if(!parsed.every(isValidLevelDef)) return null;
+    return parsed.map(cloneLevelDef);
+  }catch(_){
+    return null;
+  }
+}
+function saveDraftsToStorage(){
+  try{
+    localStorage.setItem(STORAGE_KEY,JSON.stringify(editorDrafts));
+    setEditorMsg('已保存到本地',true);
+  }catch(_){
+    setEditorMsg('本地保存失败',false);
+  }
+}
+function buildLevelsJson(){
+  return JSON.stringify(editorDrafts,null,2);
+}
+async function copyLevelsJson(){
+  const txt=buildLevelsJson();
+  const payload=`const LEVELS=${txt};`;
+  try{
+    await navigator.clipboard.writeText(payload);
+    setEditorMsg('关卡JSON已复制，可直接贴回HTML',true);
+  }catch(_){
+    setEditorMsg('复制失败，请手动复制弹窗内容',false);
+    window.prompt('复制关卡JSON：',payload);
+  }
 }
 function getDraft(levelIdx){
   if(!editorDrafts[levelIdx]) editorDrafts[levelIdx]=cloneLevelDef(LEVELS[levelIdx]||LEVELS[0]);
@@ -296,7 +376,12 @@ function validateDraft(levelIdx){
   return{ok:true,msg:'校验通过，可以应用'};
 }
 function initEditor(){
-  editorDrafts=LEVELS.map(cloneLevelDef);
+  const loaded=loadDraftsFromStorage();
+  editorDrafts=(loaded||LEVELS.map(cloneLevelDef)).slice(0,FIXED_LEVEL_COUNT);
+  while(editorDrafts.length<FIXED_LEVEL_COUNT){
+    editorDrafts.push(cloneLevelDef(LEVELS[editorDrafts.length]||LEVELS[0]));
+  }
+  levels=editorDrafts.map(cloneLevelDef);
   editorSelectedLevel=0;
   editorColor=editorDrafts[0].groups[0]?.color||'red';
   editorSide='a';
@@ -312,6 +397,15 @@ function renderEditorState(){
   E.side.value=editorSide;
   E.color.value=editorColor;
   E.dirBtns.forEach(btn=>btn.classList.toggle('on',btn.dataset.dir===editorDir));
+}
+function showBlockedHintThrottled(msg='线被挡住了。'){
+  const now=Date.now();
+  if(now-lastBlockedHintAt<500) return;
+  lastBlockedHintAt=now;
+  E.blockToast.textContent=msg;
+  E.blockToast.classList.add('show');
+  if(blockedHintTimer) clearTimeout(blockedHintTimer);
+  blockedHintTimer=setTimeout(()=>E.blockToast.classList.remove('show'),650);
 }
 function draftEndpointAt(levelIdx,x,y){
   const draft=getDraft(levelIdx);
@@ -881,6 +975,12 @@ function startDraw(e){
   updateUI();
 }
 
+function isMeetByNodeOrEdgeSwap(lastCtrl,lastPeer,nextCtrl,nextPeer){
+  const nodeMeet=sp(nextCtrl,nextPeer);
+  const edgeSwap=sp(nextCtrl,lastPeer)&&sp(nextPeer,lastCtrl);
+  return nodeMeet||edgeSwap;
+}
+
 function moveDraw(e){
   if(editorMode){
     if(e) e.preventDefault();
@@ -896,7 +996,7 @@ function moveDraw(e){
   const lastCtrl=ctrlPath[ctrlPath.length-1];
   const lastPeer=peerPath[peerPath.length-1];
   if(sp(lastCtrl,gp)) return;
-  if(!adj(lastCtrl,gp)) return;
+  if(!adj(lastCtrl,gp)){ showBlockedHintThrottled(); return; }
 
   if(ctrlPath.length>=2 && sp(ctrlPath[ctrlPath.length-2],gp)){
     ctrlPath.pop();
@@ -912,22 +1012,25 @@ function moveDraw(e){
   const peerDir=activeSide==='a'?g.b.dir:g.a.dir;
   const dx=gp.x-lastCtrl.x,dy=gp.y-lastCtrl.y;
   const md=localMirrorDelta(ctrlDir,peerDir,dx,dy);
+  const nextCtrl={x:gp.x,y:gp.y};
   const nextPeer={x:lastPeer.x+md.x,y:lastPeer.y+md.y};
-  if(!inGrid(gp.x,gp.y) || !inGrid(nextPeer.x,nextPeer.y)) return;
-  if(isBlocked(gp.x,gp.y) || isBlocked(nextPeer.x,nextPeer.y)) return;
-  if(endpointOccupiedByOther(activeColor,gp.x,gp.y) || endpointOccupiedByOther(activeColor,nextPeer.x,nextPeer.y)) return;
-  if(hasPoint(ctrlPath,gp.x,gp.y) || hasPoint(peerPath,nextPeer.x,nextPeer.y)) return;
-  if(hasPoint(ctrlPath,nextPeer.x,nextPeer.y) || hasPoint(peerPath,gp.x,gp.y)) return;
-  if(gp.x===lastPeer.x && gp.y===lastPeer.y && nextPeer.x===lastCtrl.x && nextPeer.y===lastCtrl.y) return;
+  const isMeetStep=isMeetByNodeOrEdgeSwap(lastCtrl,lastPeer,nextCtrl,nextPeer);
+  if(!inGrid(nextCtrl.x,nextCtrl.y) || !inGrid(nextPeer.x,nextPeer.y)){ showBlockedHintThrottled(); return; }
+  if(isBlocked(nextCtrl.x,nextCtrl.y) || isBlocked(nextPeer.x,nextPeer.y)){ showBlockedHintThrottled(); return; }
+  if(endpointOccupiedByOther(activeColor,nextCtrl.x,nextCtrl.y) || endpointOccupiedByOther(activeColor,nextPeer.x,nextPeer.y)){ showBlockedHintThrottled(); return; }
+  if(hasPoint(ctrlPath,nextCtrl.x,nextCtrl.y) || hasPoint(peerPath,nextPeer.x,nextPeer.y)){ showBlockedHintThrottled(); return; }
+  if(!isMeetStep){
+    if(hasPoint(ctrlPath,nextPeer.x,nextPeer.y) || hasPoint(peerPath,nextCtrl.x,nextCtrl.y)){ showBlockedHintThrottled(); return; }
+  }
 
-  const hit1=hitOtherPath(activeColor,gp.x,gp.y);
+  const hit1=hitOtherPath(activeColor,nextCtrl.x,nextCtrl.y);
   if(hit1) resetGroupPath(hit1);
   const hit2=hitOtherPath(activeColor,nextPeer.x,nextPeer.y);
   if(hit2) resetGroupPath(hit2);
 
-  ctrlPath.push({x:gp.x,y:gp.y});
+  ctrlPath.push(nextCtrl);
   peerPath.push(nextPeer);
-  if(gp.x===nextPeer.x && gp.y===nextPeer.y){
+  if(isMeetStep){
     st.done=true;
     drawing=false;
     activeColor=null;
@@ -954,6 +1057,7 @@ function applyDraftToLevel(levelIdx){
   const ck=validateDraft(levelIdx);
   if(!ck.ok){setEditorMsg(ck.msg,false); return false;}
   levels[levelIdx]=cloneLevelDef(getDraft(levelIdx));
+  saveDraftsToStorage();
   setEditorMsg('已应用到试玩关卡',true);
   return true;
 }
@@ -1086,6 +1190,12 @@ E.applyBtn.onclick=()=>{
   editorMode=false;
   renderEditorState();
   updateUI();
+};
+E.saveBtn.onclick=()=>{
+  saveDraftsToStorage();
+};
+E.copyBtn.onclick=()=>{
+  copyLevelsJson();
 };
 
 window.addEventListener('resize',()=>{resizeCV()});
