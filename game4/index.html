@@ -141,7 +141,8 @@ canvas{display:block;border-radius:13px;touch-action:none}
   </div>
   <div class="ed-actions">
     <button class="btn b2" id="bEdSave">保存到本地</button>
-    <button class="btn b2" id="bEdCopy">复制关卡JSON</button>
+    <button class="btn b2" id="bEdCopy">复制当前关JS</button>
+    <button class="btn b2" id="bEdClearStore">清缓存重载</button>
   </div>
   <div class="ed-msg" id="edMsg">开启编辑模式后，可拖拽到棋盘落点</div>
 </aside>
@@ -175,38 +176,38 @@ const LEVELS=[
     grid:5,
     blocks:[],
     groups:[
-      {color:'red',a:{x:1,y:0,dir:'up'},b:{x:3,y:5,dir:'down'}}
+      {color:'red',a:{x:1,y:0,dir:'up'},b:{x:3,y:4,dir:'down'}}
     ]
   },
   {
     grid:5,
     blocks:[],
     groups:[
-      {color:'red',a:{x:0,y:1,dir:'right'},b:{x:4,y:1,dir:'left'}},
+    {color:'red',a:{x:1,y:3,dir:'right'},b:{x:3,y:1,dir:'down'}}
     ]
   },
   {
     grid:5,
-    blocks:[[2,2]],
+    blocks:[[2,1]],
     groups:[
-      {color:'red',a:{x:0,y:1,dir:'right'},b:{x:4,y:1,dir:'left'}},
+    {color:'red',a:{x:2,y:0,dir:'up'},b:{x:2,y:4,dir:'down'}}
     ]
   },
   {
     grid:5,
     blocks:[[1,2],[3,2]],
     groups:[
-      {color:'red',a:{x:0,y:1,dir:'right'},b:{x:4,y:1,dir:'left'}},
+    {color:'red',a:{x:0,y:4,dir:'down'},b:{x:4,y:2,dir:'right'}}
     ]
-  },
+},
   {
     grid:6,
-    blocks:[[2,2],[3,3]],
+    blocks:[],
     groups:[
-      {color:'red',a:{x:0,y:1,dir:'right'},b:{x:5,y:1,dir:'left'}},
-      {color:'blue',a:{x:0,y:4,dir:'right'},b:{x:5,y:4,dir:'left'}},
+      {color:'red',a:{x:1,y:0,dir:'up'},b:{x:4,y:4,dir:'down'}},
+      {color:'blue',a:{x:4,y:3,dir:'right'},b:{x:1,y:3,dir:'left'}}
     ]
-  }
+}
 ];
 const DIRS=['up','right','down','left'];
 const FIXED_LEVEL_COUNT=5;
@@ -225,6 +226,7 @@ const E={
   applyBtn:document.getElementById('bEdApply'),
   saveBtn:document.getElementById('bEdSave'),
   copyBtn:document.getElementById('bEdCopy'),
+  clearStoreBtn:document.getElementById('bEdClearStore'),
   blockToast:document.getElementById('blockToast')
 };
 
@@ -307,19 +309,45 @@ function saveDraftsToStorage(){
     setEditorMsg('本地保存失败',false);
   }
 }
-function buildLevelsJson(){
-  return JSON.stringify(editorDrafts,null,2);
+function jsQuote(s){
+  return `'${String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'")}'`;
 }
-async function copyLevelsJson(){
-  const txt=buildLevelsJson();
-  const payload=`const LEVELS=${txt};`;
+function levelToJsLiteral(lv,indent=''){
+  const i1=indent+'  ',i2=indent+'    ',i3=indent+'      ';
+  const blocks=(lv.blocks||[]).map(b=>`[${b[0]},${b[1]}]`).join(',');
+  const groups=(lv.groups||[]).map(g=>[
+    `${i2}{`,
+    `${i3}color:${jsQuote(g.color)},`,
+    `${i3}a:{x:${g.a.x},y:${g.a.y},dir:${jsQuote(g.a.dir)}},`,
+    `${i3}b:{x:${g.b.x},y:${g.b.y},dir:${jsQuote(g.b.dir)}}`,
+    `${i2}}`
+  ].join('\n')).join(',\n');
+  return [
+    `${indent}{`,
+    `${i1}grid:${lv.grid},`,
+    `${i1}blocks:[${blocks}],`,
+    `${i1}groups:[`,
+    groups,
+    `${i1}]`,
+    `${indent}}`
+  ].join('\n');
+}
+async function copyCurrentLevelJs(){
+  const lv=getDraft(editorSelectedLevel);
+  const payload=levelToJsLiteral(lv);
   try{
     await navigator.clipboard.writeText(payload);
-    setEditorMsg('关卡JSON已复制，可直接贴回HTML',true);
+    setEditorMsg(`第 ${editorSelectedLevel+1} 关JS已复制，可直接粘贴`,true);
   }catch(_){
     setEditorMsg('复制失败，请手动复制弹窗内容',false);
-    window.prompt('复制关卡JSON：',payload);
+    window.prompt('复制当前关JS：',payload);
   }
+}
+function clearStoredLevelsAndReload(){
+  try{
+    localStorage.removeItem(STORAGE_KEY);
+  }catch(_){}
+  location.reload();
 }
 function getDraft(levelIdx){
   if(!editorDrafts[levelIdx]) editorDrafts[levelIdx]=cloneLevelDef(LEVELS[levelIdx]||LEVELS[0]);
@@ -1195,7 +1223,10 @@ E.saveBtn.onclick=()=>{
   saveDraftsToStorage();
 };
 E.copyBtn.onclick=()=>{
-  copyLevelsJson();
+  copyCurrentLevelJs();
+};
+E.clearStoreBtn.onclick=()=>{
+  clearStoredLevelsAndReload();
 };
 
 window.addEventListener('resize',()=>{resizeCV()});
